@@ -50,6 +50,7 @@ void file_process()
 
     auto lam =  [&]() {fclose(fp);};
 
+    // 这里lam是左值，调用ScopeGuard 第15行构造
     ScopeGuard<decltype(lam)> scopeGuard(lam);
 
     // 文件处理...
@@ -59,5 +60,7 @@ void file_process()
 }
 
 int main() {
+    file_process();
+
     return 0;
 }
