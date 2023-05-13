@@ -283,7 +283,7 @@ int main()
 #### 代码细节
 问：虚函数step2，step4为什么private
 
-答：NVI：Non-Virtual Interface（公有结构非虚，虚函数尽量私有）。因为虚函数作为整个程序骨架的一部分，不会被外界独立调用。所以要进行private，除非子类有调用需求，可以设为protected。
+答：**NVI：Non-Virtual Interface（公有接口非虚，虚函数尽量私有）**。因为虚函数作为整个程序骨架的一部分，不会被外界独立调用。所以要进行private，除非子类有调用需求，可以设为protected。
 
 ### 编译时多态实现TemplateMethod
 #### 设计习语：CRTP
