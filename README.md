@@ -446,3 +446,163 @@ CRTP要点解析：
 1. 通过模板参数将子类类型在编译时注入基类，从而实现基类提前获取子类信息。
 2. static_cast将基类指针转型为模板子类T的指针
 3. 删除对象也要使用编译时多态删除，避免直接delete
+
+## 八、strategy模式
+某些对象的算法可能多种多样，经常改变，如果将这些算法编码到对象中，将会使对象变得异常复杂。
+
+如何在运行时去透明的更改对象的算法，并且是它们可以互相替换，将算法和对象本身解耦。 
+
+想象一个场景：订单税种计算，不同国家的税计算方法不同
+
+最容易想到的做法：
+```C++
+enum TaxBase 
+{
+    CN_Tax, // 中国税计算
+    US_Tax, // 美国税计算
+    DE_Tax // 德国税计算
+};
+
+class SalesOrder
+{
+    TaxBase tax;
+
+public:
+    double calcTax() {
+        if (tax == CN_Tax) {
+            // CN****************
+        } else if (tax == US_Tax) {
+            // US****************
+        } else if (tax == DE_Tax) {
+            // DE****************
+        }
+
+        // ........
+    }
+};
+```
+
+如果从静态的角度看这段逻辑，没有任何问题。但如果加入时间维度，针对未来的变化，假设未来要支持法国税的计算，该怎么解决呢？
+
+
+我们需要修改两个地方：
+```C++
+enum TaxBase 
+{
+    CN_Tax, 
+    US_Tax, 
+    DE_Tax, 
+    FR_Tax // 更改
+};
+
+class SalesOrder
+{
+    TaxBase tax;
+
+public:
+    double calcTax() {
+        if (tax == CN_Tax) {
+            // CN****************
+        } else if (tax == US_Tax) {
+            // US****************
+        } else if (tax == DE_Tax) {
+            // DE****************
+        } else if (tax == FR_Tax) {
+            // 更改
+        }
+
+        // ........
+    }
+};
+```
+
+这个修改违背了一个设计原则：开闭原则。
+
+类模块应该使用扩展的方式来支持未来的变化，而不是改源代码来应对未来的变化。
+
+### Strategy模式实现
+ [完整示例代码](./strategy/strategy2.cpp)
+```C++
+/**
+ * 抽象出税收计算策略接口
+ */
+class TaxStrategy
+{
+public:
+    virtual double calc(const Context& context) = 0;
+    virtual ~TaxStrategy(){}
+};
+
+// 中国
+class CNTax : public TaxStrategy
+{
+public:
+    virtual double calc(const Context &context) override {
+
+    }
+};
+
+// 美国
+class USTax : public TaxStrategy
+{
+public:
+    virtual double calc(const Context &context) override {
+
+    }
+};
+
+// 德国
+class DETax : public TaxStrategy
+{
+public:
+    virtual double calc(const Context &context) override {
+
+    }
+};
+
+class SalesOrder
+{
+private:
+    TaxStrategy* strategy;
+
+public:
+    SalesOrder(StrategyFactory* strategyFactory) {
+        this->strategy = strategyFactory->newStrategy();
+    }
+    ~SalesOrder() {
+        delete this->strategy;
+    }
+
+    double calcTax() {
+        // ...
+
+        Context context();
+        // 多态调用
+        double val = strategy->calc(context);
+
+        //...
+    }
+};
+```
+
+如果未来新增一个法国的税收计算，只需要新增一个法国计算实现即可。业务代码SalesOrder不需要改变。这就遵循了开闭原则。
+```C++
+// 扩展：法国
+class FRTax : public TaxStrategy
+{
+public:
+    virtual double calc(const Context &context) override {
+
+    }
+};
+```
+
+Strategty模式定义（GoF）：定义一系列算法，把他们一个个封装起来，并且是他们可以互相替换（变化）。该模式使得算法可独立于它们的客户程序（稳定）而变化（扩展方式）。
+
+模式类图：
+
+![](./strategy/strategy.png)
+
+代码中出现了大量的if-else（bad smell），其实strategy模式的雏形就出现了。当这个不是绝对的，如果if-else的分支是稳定不变的，可以不用考虑strategy模式。比如：一周7天，7个分支，这个肯定不会变化。
+
+
