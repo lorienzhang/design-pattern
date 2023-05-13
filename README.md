@@ -605,4 +605,532 @@ Strategty模式定义（GoF）：定义一系列算法，把他们一个个封�
 
 代码中出现了大量的if-else（bad smell），其实strategy模式的雏形就出现了。当这个不是绝对的，如果if-else的分支是稳定不变的，可以不用考虑strategy模式。比如：一周7天，7个分支，这个肯定不会变化。
 
+从更抽象的层面来看，template method和strategty模式很类似，都是一种晚期绑定的实现。
 
+
+## 九、observer观察者模式
+观察者模式一种解决什么样的松耦合问题？
+
+某些对象需要建立一种"通知依赖关系"；一个对象（目标对象）的状态发生改变，所有依赖对象（观察者对象）都将得到通知。如果这样的依赖过于紧密，将使软件不能很好的抵御变化。
+
+考虑一个场景：文件下载，更新UI进度条
+```C++
+#include <iostream>
+
+using namespace std;
+
+// 文件下载
+class FileDownloader
+{
+    string m_filePath;
+    int m_fileNumber;
+    ProgressBar* m_progressBar;
+
+public:
+    FileDownloader(const string& filePath, 
+    int fileNumber,
+    ProgressBar* progressBar):
+        m_filePath(filePath),
+        m_fileNumber(fileNumber),
+        m_progressBar(progressBar)
+    {
+    }
+
+    void download() {
+        // 1. 网络下载准备
+
+        // 2. 文件流处理
+
+        // 3. 设置进度条
+        for (int i = 0; i < m_fileNumber; i++) {
+            // ...
+            float progressValue = m_fileNumber;
+            progressValue = (i + 1) / progressValue;
+            // 更新进度条
+            m_progressBar->setValue(progressValue);
+        }
+    }
+};
+
+// UI视图
+class MainForm : public MainForm
+{
+    ProgressBar *progressBar;
+
+public:
+    void button_click() {
+        string file_path = "xxx";
+        int number =5;
+        FileDownloader downloader(file_path, number, progressBar);
+
+        downloader.download();
+    }
+};
+```
+
+**这个设计最大的问题**：FileDownloader依赖了一个UI控件。违背设计原则：依赖倒置原则。
+
+改进：解除FileDownloader对ProgressBar依赖，需要对进度通知进行抽象.
+```C++
+#include <iostream>
+#include <memory>
+
+using namespace std;
+
+// 进度的抽象，供FileDownloader依赖
+class IProgress 
+{
+public:
+    virtual void doProgress(float value)=0;
+    virtual ~IProgress(){}
+};
+
+// 控制台输出进度
+class ConsoleNotifer : public IProgress
+{
+    void doProgress(float value) override {
+        cout << ".";
+    }
+};
+
+class FileDownloader
+{
+    string m_filePath;
+    int m_fileNumber;
+    shared_ptr<IProgress> m_iprogress;
+
+public:
+    FileDownloader(const string& filePath, 
+    int fileNumber):
+        m_filePath(filePath),
+        m_fileNumber(fileNumber)
+    {
+    }
+
+    void download() {
+        // 1. 网络下载准备
+
+        // 2. 文件流处理
+
+        // 3. 设置进度条
+        for (int i = 0; i < m_fileNumber; i++) {
+            // ...
+            float progressValue = m_fileNumber;
+            progressValue = (i + 1) / progressValue;
+            // 对外通知
+            m_iprogress->doProgress(progressValue);
+        }
+    }
+
+    /**
+     * 设置回调通知
+     */
+    void setProgress(shared_ptr<IProgress> progress) {
+        m_iprogress = progress;
+    }
+};
+
+class MainForm : public Form, public IProgress, public enable_shared_from_this<MainForm>
+{
+    shared_ptr<ProgressBar> progressBar;
+
+public:
+    void button_click() {
+        string file_path = "xxx";
+        int number =5;
+
+        FileDownloader downloader(file_path, number);
+
+        // 正确
+        // shared_ptr<IProgress> ip = make_shared<ConsoleNotifer>();
+        // downloader.setProgress(ip);
+
+        // 错误：不能对this指针构造shared_ptr，会导致this指针被析构两次
+        // shared_ptr<IProgress> ip{this};
+        // downloader.setProgress(ip);
+
+        // 正确
+        shared_ptr<IProgress> ip = shared_from_this();
+        downloader.setProgress(ip);
+
+        // 执行下载
+        downloader.download();
+    }
+
+    void doProgress(float value) override {
+        // 更新进度条
+        progressBar->setValue(value);
+    }
+};
+```
+
+使用shared_ptr对回调进行包装。这里有几个细节：
+1. shared_ptr对this指针包装，要使用enable_shared_from_this
+2. 一旦使用shared_from_this，外部就不能使用MainForm裸指针，必须用shared_ptr对MainForm进行包装使用。
+
+接下来看下观察者模式**一对多**的版本:
+
+```C++
+#include <iostream>
+#include <memory>
+#include <list>
+
+using namespace std;
+
+// 进度的抽象，供FileDownloader依赖
+class IProgress 
+{
+public:
+    virtual void doProgress(float value)=0;
+    virtual ~IProgress(){}
+};
+
+// 控制台输出进度
+class ConsoleNotifer : public IProgress
+{
+    void doProgress(float value) override {
+        cout << ".";
+    }
+};
+
+class FileDownloader
+{
+    string m_filePath;
+    int m_fileNumber;
+
+    // 这里持有共享指针，可能导致MainForm生命周期被拉长
+    // FileDownloader存在，如果MainForm不存在了，就会出错
+    list<shared_ptr<IProgress>> m_iprorgressList;
+
+public:
+    FileDownloader(const string& filePath, 
+    int fileNumber):
+        m_filePath(filePath),
+        m_fileNumber(fileNumber)
+    {
+    }
+
+    void download() {
+        // 1. 网络下载准备
+
+        // 2. 文件流处理
+
+        // 3. 设置进度条
+        for (int i = 0; i < m_fileNumber; i++) {
+            // ...
+            float progressValue = m_fileNumber;
+            progressValue = (i + 1) / progressValue;
+
+            // 对外通知
+            onProgress(progressValue);
+        }
+    }
+
+    void addIProgress(const shared_ptr<IProgress>& iprogress) {
+        m_iprorgressList.push_back(iprogress);
+    }
+
+    void removeIProgress(const shared_ptr<IProgress>& iprogress) {
+        m_iprorgressList.remove(iprogress);
+    }
+
+protected:
+    void onProgress(float value) {
+        for (auto& progress : m_iprorgressList) {
+            progress->doProgress(value);
+        }
+    }
+};
+
+class MainForm : public Form, public IProgress, 
+            public enable_shared_from_this<MainForm>
+{
+    shared_ptr<ProgressBar> progressBar;
+
+public:
+    void button_click() {
+        string file_path = "xxx";
+        int number =5;
+
+        FileDownloader downloader(file_path, number);
+
+        shared_ptr<IProgress> ip = make_shared<ConsoleNotifer>();
+        downloader.addIProgress(ip);
+
+        downloader.addIProgress(shared_from_this());
+
+        downloader.download();
+    }
+
+    void doProgress(float value) override {
+        // 更新进度条
+        progressBar->setValue(value);
+    }
+};
+```
+
+这个版本观察者还有个问题：
+1. FileDownloader通过shared_ptr持有外部MainForm、ConsoleNotifer。这导致MainForm、ConsoleNotifer生命周期被FileDownloader拉长了。
+
+如果希望MainForm该释放就释放，不要因为我做了别人的观察者，把我的生命周期拉长。对于FileDownloader，如果观察者的生存周期结束，就不要去通知了。
+
+使用weak_ptr改进：
+```C++
+#include <iostream>
+#include <memory>
+#include <list>
+#include <algorithm>
+
+using namespace std;
+
+// 进度的抽象，供FileDownloader依赖
+class IProgress 
+{
+public:
+    virtual void doProgress(float value)=0;
+    virtual ~IProgress(){}
+};
+
+// 控制台输出进度
+class ConsoleNotifer : public IProgress
+{
+    void doProgress(float value) override {
+        cout << ".";
+    }
+};
+
+class FileDownloader
+{
+    string m_filePath;
+    int m_fileNumber;
+
+    list<weak_ptr<IProgress>> m_iprorgressList;
+
+public:
+    FileDownloader(const string& filePath, 
+    int fileNumber):
+        m_filePath(filePath),
+        m_fileNumber(fileNumber)
+    {
+    }
+
+    void download() {
+        // 1. 网络下载准备
+
+        // 2. 文件流处理
+
+        // 3. 设置进度条
+        for (int i = 0; i < m_fileNumber; i++) {
+            // ...
+            float progressValue = m_fileNumber;
+            progressValue = (i + 1) / progressValue;
+
+            // 通知观察者
+            onProgress(progressValue);
+        }
+    }
+
+    void addIProgress(const shared_ptr<IProgress>& iprogress) {
+        m_iprorgressList.push_back(iprogress);
+    }
+
+    void removeIProgress(const shared_ptr<IProgress>& iprogress) {
+        remove_if(m_iprorgressList.begin(), m_iprorgressList.end(), 
+            [](const weak_ptr<Observer>& wptr) {
+                if (wptr.expired()) {
+                    return true;
+                } else {
+                    shared_ptr<IProgress> sptr = wptr.lock();
+                    return (sptr == iprogress);
+                }
+            });
+    }
+
+protected:
+    virtual void onProgress(float value) {
+        for (auto& progress : m_iprorgressList) {
+
+            // 弱引用检查生命周期是否存在？
+            shared_ptr<IProgress> s_progress = progress.lock();
+            if (s_progress != nullptr) {
+                s_progress->doProgress(value);
+            }
+        }
+
+        // 记住：删除空的弱引用
+        remove_if(m_iprorgressList.begin(), m_iprorgressList.end(), 
+                [](const weak_ptr<Observer>& wptr) {
+                    return wptr.expired();
+                });
+    }
+};
+
+class MainForm : public Form, public IProgress, 
+            public enable_shared_from_this<MainForm>
+{
+    shared_ptr<ProgressBar> progressBar;
+
+public:
+    void button_click() {
+        string file_path = "xxx";
+        int number =5;
+
+        FileDownloader downloader(file_path, number);
+
+        shared_ptr<IProgress> ip = make_shared<ConsoleNotifer>();
+        downloader.addIProgress(ip);
+
+        downloader.addIProgress(shared_from_this());
+
+        downloader.download();
+    }
+
+    void doProgress(float value) override {
+        // 更新进度条
+        progressBar->setValue(value);
+    }
+};
+```
+
+要点：
+每次对观察者通知结束，要将空的弱引用删除，否则这些弱引用对象会一直存在list中，占内存。
+
+还可以进一步优化：现在整个观察者模式的代码都揉在FileDownloader当中，这个不太好。比较好的做法是，把这套观察者模式的代码抽象到基类当中。
+```c++
+#include <iostream>
+#include <memory>
+#include <list>
+#include <algorithm>
+
+using namespace std;
+
+// 进度的抽象，供FileDownloader依赖
+class IProgress 
+{
+public:
+    virtual void doProgress(float value)=0;
+    virtual ~IProgress(){}
+};
+
+// 基类：专门管理观察者对象
+class Subject
+{
+private:
+    list<weak_ptr<IProgress>> m_iprogressList; //弱引用
+
+protected:
+    virtual void onProgress(float value) {
+        for (auto& progress : m_iprogressList) {
+
+            // 弱引用检查生命周期是否存在？
+            shared_ptr<IProgress> s_progress = progress.lock();
+            if (s_progress != nullptr) {
+                s_progress->doProgress(value);
+            }
+        }
+
+        // 记住：删除空的弱引用
+        remove_if(m_iprogressList.begin(), m_iprogressList.end(), 
+                [](const weak_ptr<Observer>& wptr) {
+                    return wptr.expired();
+                });
+    }
+
+public:
+    void addIProgress(const shared_ptr<IProgress>& iprogress) {
+        m_iprogressList.push_back(iprogress);
+    }
+
+    void removeIProgress(const shared_ptr<IProgress>& iprogress) {
+        remove_if(m_iprogressList.begin(), m_iprogressList.end(), 
+            [](const weak_ptr<Observer>& wptr) {
+                if (wptr.expired()) {
+                    return true;
+                } else {
+                    shared_ptr<IProgress> sptr = wptr.lock();
+                    return (sptr == iprogress);
+                }
+            });
+    }
+};
+
+// 控制台输出进度
+class ConsoleNotifer : public IProgress
+{
+    void doProgress(float value) override {
+        cout << ".";
+    }
+};
+
+class FileDownloader : public Subject
+{
+    string m_filePath;
+    int m_fileNumber;
+
+    list<weak_ptr<IProgress>> m_iprorgressList;
+
+public:
+    FileDownloader(const string& filePath, 
+    int fileNumber):
+        m_filePath(filePath),
+        m_fileNumber(fileNumber)
+    {
+    }
+
+    void download() {
+        // 1. 网络下载准备
+
+        // 2. 文件流处理
+
+        // 3. 设置进度条
+        for (int i = 0; i < m_fileNumber; i++) {
+            // ...
+            float progressValue = m_fileNumber;
+            progressValue = (i + 1) / progressValue;
+
+            // 调用基类，通知观察者
+            onProgress(progressValue);
+        }
+    }
+
+    void onProgress(float value) override {
+        // 父类onProgress，通知观察者
+        Subject::onProgress(value);
+
+        // 子类扩展...
+    }
+};
+
+class MainForm : public Form, public IProgress, 
+            public enable_shared_from_this<MainForm>
+{
+    shared_ptr<ProgressBar> progressBar;
+
+public:
+    void button_click() {
+        string file_path = "xxx";
+        int number =5;
+
+        FileDownloader downloader(file_path, number);
+
+        shared_ptr<IProgress> ip = make_shared<ConsoleNotifer>();
+        downloader.addIProgress(ip);
+
+        downloader.addIProgress(shared_from_this());
+
+        downloader.download();
+    }
+
+    void doProgress(float value) override {
+        // 更新进度条
+        progressBar->setValue(value);
+    }
+};
+```
+
+这就是观察者Observer模式的最经典的面向对象实现~
+
+要点总结：
+1. 使用面向对象抽象，Observer模式使得我们可以独立改变目标和观察者，从而使二者之间的依赖关系达到松耦合
+2. 观察者自己决定是否需要订阅通知，目标对象对此一无所知
+3. Observer模式对于观察者对象的生命周期管理，可以考虑使用shared_ptr+weak_ptr来支持无"生命周期依赖"的观察者
