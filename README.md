@@ -875,6 +875,8 @@ public:
 如果希望MainForm该释放就释放，不要因为我做了别人的观察者，把我的生命周期拉长。对于FileDownloader，如果观察者的生存周期结束，就不要去通知了。
 
 使用weak_ptr改进：
+
+[完整示例代码](./observer/FileDownloader4.cpp)
 ```C++
 #include <iostream>
 #include <memory>
@@ -996,6 +998,8 @@ public:
 每次对观察者通知结束，要将空的弱引用删除，否则这些弱引用对象会一直存在list中，占内存。
 
 还可以进一步优化：现在整个观察者模式的代码都揉在FileDownloader当中，这个不太好。比较好的做法是，把这套观察者模式的代码抽象到基类当中。
+
+[完整示例代码](./observer/FileDownloader5.cpp)
 ```c++
 #include <iostream>
 #include <memory>
@@ -1134,3 +1138,223 @@ public:
 1. 使用面向对象抽象，Observer模式使得我们可以独立改变目标和观察者，从而使二者之间的依赖关系达到松耦合
 2. 观察者自己决定是否需要订阅通知，目标对象对此一无所知
 3. Observer模式对于观察者对象的生命周期管理，可以考虑使用shared_ptr+weak_ptr来支持无"生命周期依赖"的观察者
+
+下面看下，**观察者模式的泛型版本，函数对象**
+
+[完整示例代码](./observer/FileDownloader_Generic1.cpp)
+
+```c++
+#include <list>
+#include <iostream>
+
+using namespace std;
+
+template<typename ProgressObserver>
+class Subject
+{
+private:
+    list<ProgressObserver> m_iprogressList;
+
+public:
+    void addIProgress(const ProgressObserver& iprogress) {
+        m_iprogressList.push_back(iprogress);
+    }
+
+    void removeIProgress(const ProgressObserver& iprogress) {
+        m_iprogressList.remove(iprogress);
+    }
+
+protected:
+    void onProgress(float value) {
+        for (auto& progress : m_iprogressList) {
+            progress(value);    // 隐式约定，传入函数对象（仿函数）
+        }
+    }
+};
+
+template<typename ProgressObserver>
+class FileDownloader : public Subject<ProgressObserver>
+{
+    string m_filePath;
+    int m_fileNumber;
+
+public:
+    FileDownloader(const string& filePath, int fileNumber) :
+        m_fileNumber(fileNumber),
+        m_filePath(filePath) {
+    }
+
+    void download() {
+        // 1. 网络下载准备
+
+        // 2. 文件流处理
+
+        // 3. 设置进度
+        for (int i = 0; i < m_fileNumber; i++) {
+            // ...
+            float progressValue = m_fileNumber;
+            progressValue = (i + 1) / progressValue;
+            
+            this->onProgress(progressValue);  // 通知观察者
+        }
+    }
+};
+
+// 函数对象
+struct ConsoleProgressObserver
+{
+    int _id;
+    ConsoleProgressObserver(int id) : _id(id) {}
+
+    friend bool operator==(const ConsoleProgressObserver& left, const ConsoleProgressObserver& right) {
+        return left._id == right._id;
+    }
+
+    // 重载了()，这个对象就满足可调用对象，仿函数
+    void operator()(float value) {
+        cout << ".";
+    }
+};
+
+// 函数对象
+struct ProgressBarObserver
+{
+    void operator()(float value) {
+        // ...
+    }
+};
+
+int main() {
+    // ConsoleProgressObserver
+    FileDownloader<ConsoleProgressObserver> fd("http://xxx.xxx.com", 5);
+    // ProgressBarObserver
+    // FileDownloader<ProgressBarObserver> fd2("http://xxx.xxx.com", 5);
+
+    ConsoleProgressObserver pob(101);
+    fd.addIProgress(pob);
+    fd.download();
+}
+```
+
+要点：
+1. 可调用对象的类型通过模板参数传入
+2. 通知观察者：progress(value)，progress都是一些可调用对象。比如：ConsoleProgressObserver，ProgressBarObserver都重写了()运算符。
+3. 函数对象、Lambda仅支持单一类型的policy。如需支持多态，即观察者容器支持添加多种回调结构，可用**std::function**
+
+std::function及其灵活，配合lambda表达式可以传入更多的类型。
+
+ [完整示例代码](./observer/FileDownloader_Generic2.cpp)
+
+```c++
+#include <list>
+#include <iostream>
+#include <functional>
+
+using namespace std;
+
+// std::function  支持多种类型的可调用对象
+using ProgressListener = std::function<void(float)>;
+
+class Subject
+{
+private:
+    list<ProgressListener> m_iprogressList; // 共享引用
+
+public:
+    void addIProgress(const ProgressListener& iprogress) {
+        m_iprogressList.push_back(iprogress);
+    }
+
+    // void removeIProgress(const ProgressListener& iprogress) {
+    //     m_iprogressList.remove(iprogress);
+    // }
+
+protected:
+    void onProgress(float value) {
+        for (auto& progress : m_iprogressList) {
+            progress(value);    // 隐式约定，传入函数对象（仿函数）
+        }
+    }
+};
+
+class FileDownloader : public Subject
+{
+    string m_filePath;
+    int m_fileNumber;
+
+public:
+    FileDownloader(const string& filePath, int fileNumber) :
+        m_fileNumber(fileNumber),
+        m_filePath(filePath) {
+    }
+
+    void download() {
+        // 1. 网络下载准备
+
+        // 2. 文件流处理
+
+        // 3. 设置进度
+        for (int i = 0; i < m_fileNumber; i++) {
+            // ...
+            float progressValue = m_fileNumber;
+            progressValue = (i + 1) / progressValue;
+            
+            this->onProgress(progressValue);  // 通知观察者
+        }
+    }
+};
+
+// std::function 绑定仿函数
+struct ConsoleProgressObserver
+{
+    int _id;
+    ConsoleProgressObserver(int id) : _id(id) {}
+
+    // 重载了()，这个对象就满足可调用对象
+    void operator()(float value) {
+        cout << "." << endl;
+    }
+};
+
+// std::function 绑定静态函数
+struct ProgressBarObserver
+{
+    static void update(float value) {
+        cout << "ProgressBarObserver: " << value << endl;
+    }
+};
+
+// std::function 绑定成员函数
+struct LoggerObserver
+{
+    void update(float value) const {
+        cout << "LoggerObserver: " << value << endl;
+    }
+};
+
+
+int main() {
+    FileDownloader fd("http://xxx.xxx.com", 10);
+
+    ConsoleProgressObserver call1(101);
+    fd.addIProgress(call1);   // 绑定函数对象(仿函数)
+
+    ProgressListener call2 = &ProgressBarObserver::update; // 绑定类中静态函数
+    fd.addIProgress(call2);
+
+    LoggerObserver obj;
+    ProgressListener call3 = [=](float value) {obj.update(value);}; // 借助lambda绑定实例对象
+    fd.addIProgress(call3);
+
+    fd.addIProgress([](float value) { cout << "lambda observer: " <<  value << endl;}); // 绑定lambda
+
+    fd.download();
+
+    return 0;
+}
+```
+
+要点：
+1. 使用std::function，可以传入仿函数，类中静态函数，实例对象，lambda等，及其灵活
+2. 但是std::function没有重载==运算符，导致无法执行remove操作
+3. 对于remove删除操作，如果使用函数对象，可以重载==运算符，借助id判断是否相等。
