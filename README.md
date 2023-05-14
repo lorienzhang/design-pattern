@@ -957,7 +957,7 @@ public:
 
     void removeIProgress(const shared_ptr<IProgress>& iprogress) {
         remove_if(m_iprorgressList.begin(), m_iprorgressList.end(), 
-            [](const weak_ptr<Observer>& wptr) {
+            [](const weak_ptr<IProgress>& wptr) {
                 if (wptr.expired()) {
                     return true;
                 } else {
@@ -980,7 +980,7 @@ protected:
 
         // 记住：删除空的弱引用
         remove_if(m_iprorgressList.begin(), m_iprorgressList.end(), 
-                [](const weak_ptr<Observer>& wptr) {
+                [](const weak_ptr<IProgress>& wptr) {
                     return wptr.expired();
                 });
     }
@@ -1054,7 +1054,7 @@ protected:
 
         // 记住：删除空的弱引用
         remove_if(m_iprogressList.begin(), m_iprogressList.end(), 
-                [](const weak_ptr<Observer>& wptr) {
+                [](const weak_ptr<IProgress>& wptr) {
                     return wptr.expired();
                 });
     }
@@ -1066,7 +1066,7 @@ public:
 
     void removeIProgress(const shared_ptr<IProgress>& iprogress) {
         remove_if(m_iprogressList.begin(), m_iprogressList.end(), 
-            [](const weak_ptr<Observer>& wptr) {
+            [&](const weak_ptr<IProgress>& wptr) {
                 if (wptr.expired()) {
                     return true;
                 } else {
@@ -1074,14 +1074,6 @@ public:
                     return (sptr == iprogress);
                 }
             });
-    }
-};
-
-// 控制台输出进度
-class ConsoleNotifer : public IProgress
-{
-    void doProgress(float value) override {
-        cout << ".";
     }
 };
 
@@ -1124,11 +1116,16 @@ public:
     }
 };
 
-class MainForm : public Form, public IProgress, 
-            public enable_shared_from_this<MainForm>
+// 控制台输出进度
+class ConsoleNotifer : public IProgress
 {
-    shared_ptr<ProgressBar> progressBar;
+    void doProgress(float value) override {
+        cout << "." << endl;
+    }
+};
 
+class MainForm : public IProgress, public enable_shared_from_this<MainForm>
+{
 public:
     void button_click() {
         string file_path = "xxx";
@@ -1136,19 +1133,29 @@ public:
 
         FileDownloader downloader(file_path, number);
 
+        // 观察者：ConsoleNotifer
         shared_ptr<IProgress> ip = make_shared<ConsoleNotifer>();
         downloader.addIProgress(ip);
 
+        // 观察者：this
         downloader.addIProgress(shared_from_this());
 
         downloader.download();
     }
 
     void doProgress(float value) override {
-        // 更新进度条
-        progressBar->setValue(value);
+        // 更新进度条...
+        cout << "progressbar value: " << value << endl;
     }
 };
+
+int main() {
+    // MainForm实现了enable_shared_from_this，必须使用shared_ptr方式调用
+    shared_ptr<MainForm> s_mainform = make_shared<MainForm>();
+    s_mainform->button_click();
+
+    return 0;
+}
 ```
 
 这就是观察者Observer模式的最经典的面向对象实现~

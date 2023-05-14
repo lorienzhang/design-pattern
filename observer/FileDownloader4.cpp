@@ -58,7 +58,7 @@ public:
 
     void removeIProgress(const shared_ptr<IProgress>& iprogress) {
         remove_if(m_iprorgressList.begin(), m_iprorgressList.end(), 
-            [](const weak_ptr<Observer>& wptr) {
+            [](const weak_ptr<IProgress>& wptr) {
                 if (wptr.expired()) {
                     return true;
                 } else {
@@ -81,7 +81,7 @@ protected:
 
         // 记住：删除空的弱引用
         remove_if(m_iprorgressList.begin(), m_iprorgressList.end(), 
-                [](const weak_ptr<Observer>& wptr) {
+                [](const weak_ptr<IProgress>& wptr) {
                     return wptr.expired();
                 });
     }
