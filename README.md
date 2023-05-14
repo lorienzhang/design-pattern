@@ -1225,6 +1225,7 @@ struct ConsoleProgressObserver
     int _id;
     ConsoleProgressObserver(int id) : _id(id) {}
 
+    // 为了支持Subject中的remove操作，移除观察者
     friend bool operator==(const ConsoleProgressObserver& left, const ConsoleProgressObserver& right) {
         return left._id == right._id;
     }
