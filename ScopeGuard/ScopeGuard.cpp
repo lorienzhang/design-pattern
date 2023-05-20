@@ -1,6 +1,8 @@
 #include <stack>
 #include <stdio.h>
 #include <cstdio>
+#include <string>
+#include <iostream>
 
 using namespace std;
 
@@ -44,6 +46,7 @@ private:
 
 // ************************************************************************************************
 
+// 示例 1：资源的确定性释放
 void file_process() 
 {
     FILE* fp = fopen("filename", "wb");
@@ -57,6 +60,27 @@ void file_process()
 
     // 关闭文件 
     // fclose(fp);
+}
+
+// 示例 2：当异常出现的时候，我想回退rollback
+void process() {
+    {
+        stack<string> cityStack;
+        cityStack.push("shanghai");
+
+        auto lam = [&](){
+            string s = cityStack.top();
+            // 回退
+            cityStack.pop();
+            cout << "roll back: " << s << endl;
+        };
+        ScopeGuard<decltype(lam)> scopeGuard(lam);
+
+        cout << "invoke..." << endl;
+
+        // 如果代码执行这一行，说明一切正常，解除回退
+        scopeGuard.dismiss();
+    }
 }
 
 int main() {

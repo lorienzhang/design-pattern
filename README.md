@@ -131,7 +131,9 @@ RAII核心优势：
 * Lambda
 * std::function
 
-如果我们有一段代码在函数里面想要 **确定调用**，可以使用ScopeGuard
+如果我们有一段代码在函数里面想要 **确定调用**，可以使用ScopeGuard，应用场景：
+1. 资源确定释放
+2. 代码回退
 
 [参考示例代码](./ScopeGuard/ScopeGuard.cpp)
 
