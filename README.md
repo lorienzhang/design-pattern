@@ -18,6 +18,8 @@
 
 [9. observer观察者模式](#9)
 
+[10. 工厂模式](#10)
+
 
 ## <a name="1"></a>1. 任何设计模式的最高宗旨（金科玉律）：高内聚，低耦合
 
@@ -1387,3 +1389,752 @@ int main() {
 1. 使用std::function，可以传入仿函数，类中静态函数，实例对象，lambda等，及其灵活
 2. 但是std::function没有重载==运算符，导致无法执行remove操作
 3. 对于remove删除操作，如果使用函数对象，可以重载==运算符，借助id判断是否相等。
+
+## <a name="10"></a>10. 工厂模式
+
+通过"对象创建"模式绕开new，避免对象创建（new）过程中所导致的紧耦合（依赖具体类），从而支持了对象创建的稳定。
+
+### (1) Factory Method
+由于需求变化，创建对象的具体类型需要变化。如何应对这种变化？
+
+ [完整示例代码](./FactoryMethod/ShapeFactory.h)
+
+ ```c++
+ // Shape.h
+#include <iostream>
+#include <string>
+
+using namespace std;
+
+struct Shape 
+{
+    virtual ~Shape() {}
+
+    virtual void draw() = 0;
+};
+
+
+// ***********************************
+
+struct Line : Shape 
+{
+    void draw() override {
+        cout << "draw the line" << endl;
+    }
+};
+
+struct Rectangle : Shape
+{
+    void draw() override {
+        cout << "draw the rectangle" << endl;
+    }
+};
+
+struct Circle : Shape
+{
+    void draw() override {
+        cout << "draw the circle" << endl;
+    }
+};
+ ```
+
+ ```C++
+ // ShapeFactory.h
+#include "Shape.h"
+#include <memory>
+#include <type_traits>
+
+struct ShapeFactory
+{
+    // 这个不可取，返回抽象类，对象会被切割
+    // virtual Shape create() = 0;
+    
+    // 在智能指针之前，智能用这种方法。这里有个所有权问题，要把指针所有权交出去。容易出现内存错误
+    // virtual Shape* create() = 0;
+
+    // 工厂函数和unique_ptr天然是一个好的搭配
+    virtual unique_ptr<Shape> create() = 0;
+    virtual ~ShapeFactory() {}
+};
+
+struct LineFactory : ShapeFactory
+{
+    unique_ptr<Shape> create() override {
+        Line *p = new Line();
+        auto pLine = unique_ptr<Line>(p);
+        return pLine;
+    }
+};
+
+struct RectangleFactory : ShapeFactory
+{
+    unique_ptr<Shape> create() override {
+        Rectangle *p = new Rectangle();
+        auto pRectangle = unique_ptr<Rectangle>(p);
+        return pRectangle;
+    }
+};
+
+struct CircleFactory : ShapeFactory
+{
+    unique_ptr<Shape> create() override {
+        Circle *p = new Circle();
+        auto pCircle = unique_ptr<Circle>(p);
+        return pCircle;
+    }
+};
+ ```
+上面是OO时代标准的工厂模式，每一种Shape类型都有一个对应的Factory去创建。
+
+Factory Method要点总结：
+1. Factory Method用于隔离对象的使用者和具体类型之间的耦合关系。面对经常变化的具体类型，new方式会导致软件脆弱性
+2. Factory Method模式通过面向对象手法，将所要创建的具体对象工作延迟到子类，从而实现了扩展（非更改）的策略，符合开闭原则
+3. Factory Method使用unique_ptr来管理对象声明周期（必要时可转为shared_ptr），否则容易出现内存管理问题
+
+有两个问题：
+1. Factory Method工厂颗粒度太细：shape有多少子类，工厂就得有多少个子类。代码结构上重复性页非常高：LineFactory，RectangleFactory，CircleFactory
+2. 对象构造方法必须一致，如果Line构造要2个参数，Rectangle构造需要3个参数，这个就无法满足了。
+
+用泛型优化：
+1. 可以通过泛型工厂，对传统工厂这种结构性的重复予以简化
+2. C++11 可变模板参数，支持不同Shape不同的构造函数
+
+ [完整示例代码](./FactoryMethod/GenericShape.h)
+```C++
+// GenericShape.p
+#include <iostream>
+#include <string>
+
+using namespace std;
+
+struct Shape 
+{
+    virtual ~Shape() {}
+
+    virtual void draw() = 0;
+};
+
+
+// ***********************************
+
+struct Line : Shape 
+{
+    // 两个参数构造
+    Line(int x, int y) {
+        cout << "Line(int x, int y)" << endl;
+    }
+
+    void draw() override {
+        cout << "draw the line" << endl;
+    }
+};
+
+struct Rectangle : Shape
+{
+    // 三个参数构造
+    Rectangle(int x, int y, int z) {
+        cout << "Line(int x, int y, int z)" << endl;
+    }
+
+    void draw() override {
+        cout << "draw the rectangle" << endl;
+    }
+};
+
+struct Circle : Shape
+{
+    void draw() override {
+        cout << "draw the circle" << endl;
+    }
+};
+```
+
+```C++
+// GenericFactory.cpp
+#include <memory>
+#include <utility>
+#include "GenericShape.h"
+
+using namespace std;
+
+// 一个工厂解决所有的对象创建问题
+template<typename T>
+struct ShapeFactory
+{
+    template<typename... Args>
+    unique_ptr<Shape> create(Args&& ... args) {
+        T* p_shape = new T(std::forward<Args>(args)...);
+        unique_ptr<T> uptr_shape = unique_ptr<T>(p_shape);
+        return uptr_shape;
+    }
+};
+
+int main() {
+    ShapeFactory<Line> s1;
+    unique_ptr<Shape> p1 = s1.create(10, 20);
+    p1->draw();
+
+    cout << endl;
+
+    ShapeFactory<Rectangle> s2;
+    unique_ptr<Shape> p2 = s2.create(10, 20, 100);
+    p2->draw();
+
+}
+```
+
+### (2) Prototype 原型模式
+工厂方法的变体形式：将Shape和ShapeFactory合并。
+
+ [完整示例代码](./Prototype/Prototype.h)
+
+```C++
+#include <iostream>
+#include <memory>
+#include <string>
+
+using namespace std;
+
+struct Shape
+{
+    string *p;
+
+    Shape() {}
+
+    virtual ~Shape() = default;
+
+    virtual void draw() = 0;
+
+    virtual unique_ptr<Shape> clone() = 0;
+};
+
+struct Line : Shape
+{
+    int data;
+    string text;
+
+    // 前提：拷贝构造函数得写正确
+    //      1. 如果类中没有指针，使用编译器生成default拷贝构造函数即可
+    //      2. 如果类中有指针，需要自己实现，完成深克隆
+    Line(const Line& line)=default;
+
+    // 赋值运算实现和拷贝构造一样
+    Line& operator=(const Line& r) {
+
+    }
+
+    void draw() override {
+        cout << "draw the line" << endl;
+    }
+
+    unique_ptr<Shape> clone() override {
+        unique_ptr<Shape> p { new Line(*this) }; // 要求深拷贝，拷贝构造函数得写正确
+        return p;
+    }
+};
+
+struct Rectangle : Shape 
+{
+    void draw() override {
+        cout  << "draw the circle" << endl;
+    }
+
+    unique_ptr<Shape> clone() override {
+        // 调用深克隆
+        unique_ptr<Shape> p {new Rectangle(*this) };
+        return p;
+    }
+};
+
+struct Circle : Shape 
+{
+    void draw() override {
+        cout  << "draw the circle" << endl;
+    }
+
+    unique_ptr<Shape> clone() override {
+        // 调用深克隆
+        unique_ptr<Shape> p {new Circle(*this) };
+        return p;
+    }
+};
+```
+
+要点总结：
+1. 原型模式结构不复杂，但需要各个product正确实现拷贝构造函数和赋值操作符。
+2. 看代码，原型模式代码也存在结构上的重复性
+
+通过**CRTP**解决原型模式的重复
+
+```C++
+#include <iostream>
+#include <memory>
+#include <string>
+
+using namespace std;
+
+template<typename T>
+struct Shape
+{
+    string *p;
+
+    Shape() {}
+
+    virtual ~Shape() = default;
+
+    virtual void draw() = 0;
+
+    unique_ptr<Shape> clone() const {
+        // 注意：是static_cast，转成T&
+        unique_ptr<T> p { new T(static_cast<T&>(*this)) };
+        return p;
+    }
+};
+
+struct Line : Shape<Line>
+{
+    int data;
+    string text;
+
+    // 前提：拷贝构造函数得写正确
+    //      1. 如果类中没有指针，使用编译器生成default拷贝构造函数即可
+    //      2. 如果类中有指针，需要自己实现，完成深克隆
+    Line(const Line& line)=default;
+
+    // 赋值运算实现和拷贝构造一样
+    Line& operator=(const Line& r) {
+
+    }
+
+    void draw() override {
+        cout << "draw the line" << endl;
+    }
+};
+
+struct Rectangle : Shape<Rectangle>
+{
+    void draw() override {
+        cout  << "draw the circle" << endl;
+    }
+};
+
+struct Circle : Shape<Circle>
+{
+    void draw() override {
+        cout  << "draw the circle" << endl;
+    }
+};
+```
+上面代码借助CRTP干掉一些代码重复性。将clone函数的实现统一在Shape基类中实现。
+
+但上面代码还存在一个问题：就是draw虚函数失去多态的意义。因为 `struct Line : Shape<Line>，struct Rectangle : Shape<Rectangle>，struct Circle : Shape<Circle>` 它们是三个不同的基类。**解决方案：在Shape上面再加一层**
+
+一个完整的原型模式代码如下：
+
+ [完整示例代码](./Prototype/crtp_Prototype.cpp)
+
+```C++
+#include <iostream>
+#include <memory>
+#include <string>
+
+using namespace std;
+
+struct Shape
+{
+    virtual void draw() = 0;
+    virtual unique_ptr<Shape> clone() const = 0;
+    virtual ~Shape()=default;
+};
+
+// 中间基类
+template<typename T>
+struct CloneShape: Shape
+{
+    // 中间基类：就这一个方法，目的是消除clone的重复代码，子类就不用再写clone了 
+    unique_ptr<Shape> clone() const override {
+        // 注意: 1.static_cast，本质是在父类中调用子类的拷贝构造
+        //       2. 转成T&，为了减少拷贝构造
+        //       3. const T&是clone函数后面const要求
+        unique_ptr<T> p { new T(static_cast<const T&>(*this)) };
+        return p;
+    }
+};
+
+struct Line : CloneShape<Line>
+{
+    int data;
+    string text;
+
+    // 前提：拷贝构造函数需要正确实现
+    //      1. 如果类中没有指针，使用编译器生成default拷贝构造函数即可
+    //      2. 如果类中有指针，需要自己实现，完成深克隆
+    Line(const Line& line) {
+        
+    }
+
+    // 赋值运算实现和拷贝构造一样
+    Line& operator=(const Line& r) {
+
+    }
+
+    void draw() override {
+        cout << "draw the line" << endl;
+    }
+};
+
+struct Rectangle : CloneShape<Rectangle>
+{
+    Rectangle() {}
+
+    Rectangle(const Rectangle& rhs) {
+
+    }
+
+    void draw() override {
+        cout  << "draw the circle" << endl;
+    }
+};
+
+struct Circle : CloneShape<Circle>
+{
+    Circle() {}
+
+    Circle(const Circle& chs) {
+
+    } 
+
+    void draw() override {
+        cout  << "draw the circle" << endl;
+    }
+};
+
+// 客户程序使用示例
+struct client
+{
+    void invoke(const Shape& prototype) {
+        unique_ptr<Shape> ps = prototype.clone();
+        ps->draw();
+    }
+};
+```
+
+这样即能保证draw()方法的多态特性，还能通过CRTP干掉子类clone()的重复代码。需要注意的是：和之前CRTP例子不一样，这里用CRTP纯粹是为了消除代码的重复性，并不是为了干掉virtual函数。
+
+原型模式类图如下：
+
+![](./Prototype/prototype.png)
+
+要点总结：
+1. 工厂方法是全新创建对象（构造函数），原型本质上调用拷贝构造函数，所以prototype模式的前提，要把拷贝构造函数写正确
+2. 原型通常是之前这个对象经过了复杂的创建过程之后，你希望复用这个对象
+3. 原型模式的优势接口稳定
+4. 设计习语：虚构造器（virtual clone）；和原型模式的原理是一致的
+
+### (3) Abstract Factory
+假设现在要设计一个数据库的应用，从db中读取员工表。
+```C++
+#include <iostream>
+#include <string>
+#include <vector>
+#include <memory>
+
+using namespace std;
+
+class SqlConnection {};
+
+class SqlCommand {};
+
+class SqlDataReader {};
+
+class EmployeeDao 
+{
+public:
+    // 伪代码：模拟数据库访问
+    vector<Employee> getEmployees() {
+        unique_ptr<SqlConnection> connection { new SqlConnection() };
+        connection->open();
+
+        unique_ptr<SqlCommand> command { new SqlCommand() };
+        command->commandText("select...");
+        command->setConnection(std::move(connection)); //关联性
+
+        vector<Employee> employees;
+
+        unique_ptr<SqlDataReader> reader = command->executeReader();
+        while (reader->read()) {
+            // ....
+        }
+
+    }
+};
+```
+这是一种最不讲究的设计，违背了依赖倒置原则，依赖了具体数据库类型。如果将来向替换成oracle，成本极高。下面通过工厂方法做下解耦。
+
+```C++
+#include <iostream>
+#include <string>
+#include <vector>
+#include <memory>
+
+using namespace std;
+
+// 数据库访问有关的基类
+class IDBConnection {
+};
+class IDBConnectionFactory
+{
+public:
+    virtual unique_ptr<IDBConnection> createDBConnection()=0;
+};
+
+class IDBCommand{
+};
+class IDBCommandFactory
+{
+public:
+    virtual unique_ptr<IDBCommand> createDBCommand()=0;
+};
+
+class IDBReader{
+};
+class IDBReaderFactory
+{
+public:
+    virtual unique_ptr<IDBReader> createDBReader()=0;
+};
+
+// ************* 支持MySql *****************
+class SqlConnection : public IDBConnection{
+};
+class SqlConnectionFactory : public IDBConnectionFactory 
+{
+public:
+    unique_ptr<IDBConnection> createDBConnection() override {
+
+    }
+};
+
+class SqlCommand : public IDBCommand{
+};
+class SqlCommandFactory : public IDBCommandFactory
+{
+public:
+    unique_ptr<IDBCommand> createDBCommand() override {
+
+    }
+};
+
+class SqlDataReader : public IDBReader{
+};
+class SqlDataReaderFactory : public IDBReaderFactory
+{
+public:
+    unique_ptr<IDBReader> createDBReader() {
+
+    }
+};
+
+// ************* 支持Oracle *****************
+class OracleConnection : public IDBConnection{
+};
+class OracleConnectionFactory : public IDBConnectionFactory 
+{
+public:
+    unique_ptr<IDBConnection> createDBConnection() override {
+
+    }
+};
+
+class OracleCommand : public IDBCommand{
+};
+class OracleCommandFactory : public IDBCommandFactory
+{
+public:
+    unique_ptr<IDBCommand> createDBCommand() override {
+
+    }
+};
+
+class OracleDataReader : public IDBReader{
+};
+class OracleDataReaderFactory : public IDBReaderFactory
+{
+public:
+    unique_ptr<IDBReader> createDBReader() {
+
+    }
+};
+
+
+// 客户程序，稳定的
+class EmployeeDAO
+{
+    // 通过抽象的工厂基类创建对象
+    unique_ptr<IDBConnectionFactory> dbConnectionFactory;
+    // 通过抽象的工厂基类创建对象
+    unique_ptr<IDBCommandFactory> dbCommandFactory;
+    // 通过抽象的工厂基类创建对象
+    unique_ptr<IDBReaderFactory> dbReaderFactory;
+
+    EmployeeDAO() {
+        // 实例化工厂
+        dbConnectionFactory = ...;
+        dbCommandFactory = ...;
+        dbReaderFactory = ...;
+    } 
+
+public:
+    vector<Employee> getEmployees() {
+        unique_ptr<IDBConnection> connection = dbConnectionFactory->createDBConnection();
+        connection->connectString("...");
+
+        unique_ptr<IDBCommand> command = dbCommandFactory->createDBCommand();
+        command->commandText("...");
+        command->setConnection(std::move(connection));  //关联性
+
+        unique_ptr<IDBReader> reader = dbReaderFactory->createDBReader();
+        while (reader->read()) {
+            // ...
+        }
+    }
+};
+```
+要点解析：
+1. 数据库操作抽象出三个基类：IDBConnection，IDBCommand，IDBReader。
+2. MySql实现类：SqlConnection，SqlCommand，SqlDataReader；每个类对应一个工厂类：SqlConnectionFactory，SqlCommandFactory，SqlDataReader；
+3. Oracle实现类和MySql类似
+4. 通过这种抽象后：EmployeeDAO类就解除了和具体DB类型的依赖，面向接口编程，保证这个类稳定。
+
+存在问题：
+1. 工厂颗粒度太细，代码太罗嗦了
+2. command和connection有关联性：SqlConnection一定要搭配SqlCommand使用，如果SqlConnection搭配了OracleCommand就会出问题
+
+**抽象工厂：提供一个接口，让该接口负责创建一系列“相关或者相互依赖的对象”，无需指定它们具体的类**
+
+[完整示例代码](./AbstractFactory/EmployeeDao3.cpp)
+
+```C++
+#include <iostream>
+#include <string>
+#include <vector>
+#include <memory>
+
+using namespace std;
+
+// 数据库访问有关的基类
+class IDBConnection {
+};
+class IDBCommand{
+};
+class IDBReader{
+};
+
+// 系列工厂（对象之间相互依赖）
+// 把这些相互依赖，有关联关系的对象放到一个工厂中
+class IDBFactory    
+{
+public:
+    virtual unique_ptr<IDBConnection> createDBConnection()=0;
+    virtual unique_ptr<IDBCommand> createDBCommand()=0;
+    virtual unique_ptr<IDBReader> createDBReader()=0;
+};
+
+// ************* 支持MySql *****************
+class SqlConnection : public IDBConnection{
+};
+class SqlCommand : public IDBCommand{
+};
+class SqlDataReader : public IDBReader{
+};
+
+
+class SqlDBFactory : public IDBFactory 
+{
+public:
+    unique_ptr<IDBConnection> createDBConnection() override {
+
+    }
+
+    unique_ptr<IDBCommand> createDBCommand() override {
+
+    }
+
+    unique_ptr<IDBReader> createDBReader() override {
+
+    }
+};
+
+
+// ************* 支持Oracle *****************
+class OracleConnection : public IDBConnection{
+};
+class OracleCommand : public IDBCommand{
+};
+class OracleDataReader : public IDBReader{
+};
+class OracleDBFactory : public IDBFactory 
+{
+public:
+    unique_ptr<IDBConnection> createDBConnection() override {
+
+    }
+
+    unique_ptr<IDBCommand> createDBCommand() override {
+
+    }
+
+    unique_ptr<IDBReader> createDBReader() override {
+        
+    }
+};
+
+
+// ----------------- 下面应用开发客户程序 ------------------------
+
+// 客户程序变得稳定，后面切换数据库不用改动
+class EmployeeDAO
+{
+    // 通过抽象的工厂基类创建对象
+    unique_ptr<IDBFactory> dbFactory;   // SqlDBFactory, OracleDBFactory...
+
+    EmployeeDAO(unique_ptr<IDBFactory> dbFactory) : dbFactory(std::move(dbFactory)) {
+        
+    } 
+
+public:
+    vector<Employee> getEmployees() {
+        unique_ptr<IDBConnection> connection = dbFactory->createDBConnection();
+        connection->connectString("...");
+
+        unique_ptr<IDBCommand> command = dbFactory->createDBCommand();
+        command->commandText("...");
+        command->setConnection(std::move(connection));  //关联性，这里关联就可以保证一致性。
+
+        unique_ptr<IDBReader> reader = dbFactory->createDBReader();
+        while (reader->read()) {
+            // ...
+        }
+    }
+};
+```
+
+抽象工厂模式的类图如下：
+
+![](./AbstractFactory/abstract_factory.png)
+
+要点总结：
+1. 如果没有应对"多系列对象构建"的需求变化，则没有必要使用Abstract Factory模式，这时简单工厂完全可以
+2. Abstract Factory模式主要在于应对"新系列"需求的变动，比如：从MySql一下切到Oracle。其缺点在于难以应对"新对象"需求的变动，因为"新对象"导致了IDBFactory不稳定，任何造成这个模式不稳定的因素都是这个模式的缺点。
+3. FactoryMethod和AbstractFactory一般都统称为：工厂模式。FactoryMethod可以看成是AbstractFactory的一个特例。
+
+**设计习语：Copy & Swap** 拷贝交换技术，可以用在实现赋值操作符，借用拷贝构造来实现，更简洁，易维护，且保证异常安全
+1. 通过调用拷贝构造函数创建一个temp对象，该临时对象是参数rhs的一个深拷贝
+2. 将该临时对象temp和this对象各成员进行交换，包括基本类型成员、对象成员、指针成员。交换之后，this对象的成员是rhs的一个深拷贝
+3. temp对象在结束时自动析构，指针成员会得到安全释放
+
+"对象创建"模式总结：
+1. Factory Method（泛型静态工厂更好用）
+2. Prototype（比较常见）
+3. Abstract Factory（不用则已，一用就很重）
+
