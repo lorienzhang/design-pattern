@@ -1489,7 +1489,7 @@ struct CircleFactory : ShapeFactory
 Factory Method要点总结：
 1. Factory Method用于隔离对象的使用者和具体类型之间的耦合关系。面对经常变化的具体类型，new方式会导致软件脆弱性
 2. Factory Method模式通过面向对象手法，将所要创建的具体对象工作延迟到子类，从而实现了扩展（非更改）的策略，符合开闭原则
-3. Factory Method使用unique_ptr来管理对象声明周期（必要时可转为shared_ptr），否则容易出现内存管理问题
+3. Factory Method使用unique_ptr来管理对象生命周期（必要时可转为shared_ptr），否则容易出现内存管理问题
 
 有两个问题：
 1. Factory Method工厂颗粒度太细：shape有多少子类，工厂就得有多少个子类。代码结构上重复性页非常高：LineFactory，RectangleFactory，CircleFactory
