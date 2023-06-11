@@ -20,6 +20,7 @@
 
 [10. 工厂模式](#10)
 
+[11. Decorator模式](#11)
 
 ## <a name="1"></a>1. 任何设计模式的最高宗旨（金科玉律）：高内聚，低耦合
 
@@ -2137,4 +2138,735 @@ public:
 1. Factory Method（泛型静态工厂更好用）
 2. Prototype（比较常见）
 3. Abstract Factory（不用则已，一用就很重）
+
+## <a name="11"></a>11. Decorator模式
+软件设计的SOLID原则，其中S就是单一职责原则。如果责任划分不清晰，使用继承得到的结果往往随着需求变化，子类急剧膨胀，同时充斥着重复代码，这时的关键在于划清责任。
+
+### Decorator面向对象
+
+先看例子：
+
+[完整示例代码](./Decorator/decorator1.cpp)
+
+```C++
+// 业务操作
+#include <bits/types/FILE.h>
+#include <iostream>
+
+class Stream {
+public:
+    virtual char read(int number)=0;
+    virtual void seek(int position)=0;
+    virtual void write(char data)=0;
+    virtual ~Stream() {}
+};
+
+/*
+1: Stream
+
+n=3: FileStream, MemoryStream, NetworkStream  主体类
+
+m=2： Crypto，Buffered  扩展
+
+子类个数：3*2 + 3*1 = 9
+
+*/
+
+// 主体类
+class FileStream: public Stream {
+public:
+    char read(int number) override {
+        // 读文件流
+    }
+
+    void seek(int position) override {
+        // 定位文件流
+    }
+
+    void write(char data) override {
+        // 写文件流
+    }
+};
+
+// 主体类
+class NetworkStream: public Stream {
+public:
+    char read(int number) override {
+        // 读网络流
+    }
+
+    void seek(int position) override {
+        // 定位网络流
+    }
+
+    void write(char data) override {
+        // 写网络流
+    }
+};
+
+// 主体类
+class MemoryStream: public Stream {
+public:
+    char read(int number) override {
+        // 读内存流
+    }
+
+    void seek(int position) override {
+        // 定位内存流
+    }
+
+    void write(char data) override {
+        // 写内存流
+    }
+};
+
+// 扩展操作1: 比如需要对流进行加密
+class CryptoFileStream: public FileStream {
+public:
+    char read(int number) override {
+        // 额外的加密操作
+
+        FileStream::read(number); // 读文件流
+
+        // 额外的加密操作
+    }
+
+    void seek(int position) override {
+        // 额外的加密操作
+
+        FileStream::seek(position); // 读文件流
+
+        // 额外的加密操作
+    }
+
+    void write(char data) override {
+        // 额外的加密操作
+
+        FileStream::write(data); // 读文件流
+
+        // 额外的加密操作
+    }
+};
+
+class CryptoNetworkStream: public NetworkStream {
+public:
+    char read(int number) override {
+        // 额外的加密操作
+
+        NetworkStream::read(number); // 读网络流
+
+        // 额外的加密操作
+    }
+
+    void seek(int position) override {
+        // 额外的加密操作
+
+        NetworkStream::seek(position); // 读网络流
+
+        // 额外的加密操作
+    }
+
+    void write(char data) override {
+        // 额外的加密操作
+
+        NetworkStream::write(data); // 读网络流
+
+        // 额外的加密操作
+    }
+};
+
+class CryptoMemoryStream: public MemoryStream {
+public:
+    char read(int number) override {
+        // 额外的加密操作
+
+        MemoryStream::read(number); // 读内存流
+
+        // 额外的加密操作
+    }
+
+    void seek(int position) override {
+        // 额外的加密操作
+
+        MemoryStream::seek(position); // 读内存流
+
+        // 额外的加密操作
+    }
+
+    void write(char data) override {
+        // 额外的加密操作
+
+        MemoryStream::write(data); // 读内存流
+
+        // 额外的加密操作
+    }
+};
+
+// 扩展操作2: 比如需要对流进行缓存
+class BufferedFileStream : public FileStream {
+    // ...
+};
+
+class BufferedNetworkStream : public NetworkStream {
+    // ...
+};
+
+class BufferedMemoryStream : public MemoryStream {
+    // ...
+};
+
+// 扩展操作3: 同时加密+缓存
+class CyptoBufferedFileStream : public BufferedFileStream {
+    // ...
+};
+
+class CyptoBufferedNetworkStream : public BufferedNetworkStream {
+    // ...
+};
+
+class CyptoBufferedMemoryStream : public BufferedMemoryStream {
+    // ...
+};
+
+void process() {
+    
+    // 编译时装配
+    CryptoFileStream *fs1 = new CryptoFileStream();
+    BufferedFileStream *fs2 = new BufferedFileStream();
+    CyptoBufferedFileStream *fs3 = new CyptoBufferedFileStream();
+
+    delete fs1;
+    delete fs2;
+    delete fs3;
+}
+```
+
+2个主体类：FileStream, MemoryStream, NetworkStream，2个扩展：Crypto, Buffered。
+
+如果通过继承的方式完成扩展，会发现子类数量爆炸。而且里面重复代码非常多。
+
+**继承转组合**: 
+
+[完整示例代码](./Decorator/decorator2.cpp)
+
+```C++
+// 业务操作
+#include <bits/types/FILE.h>
+#include <iostream>
+
+class Stream {
+public:
+    virtual char read(int number)=0;
+    virtual void seek(int position)=0;
+    virtual void write(char data)=0;
+    virtual ~Stream() {}
+};
+
+// 主体类
+class FileStream: public Stream {
+public:
+    char read(int number) override {
+        // 读文件流
+    }
+
+    void seek(int position) override {
+        // 定位文件流
+    }
+
+    void write(char data) override {
+        // 写文件流
+    }
+};
+
+// 主体类
+class NetworkStream: public Stream {
+public:
+    char read(int number) override {
+        // 读网络流
+    }
+
+    void seek(int position) override {
+        // 定位网络流
+    }
+
+    void write(char data) override {
+        // 写网络流
+    }
+};
+
+// 主体类
+class MemoryStream: public Stream {
+public:
+    char read(int number) override {
+        // 读内存流
+    }
+
+    void seek(int position) override {
+        // 定位内存流
+    }
+
+    void write(char data) override {
+        // 写内存流
+    }
+};
+
+// 扩展操作1: 比如需要对流进行加密
+
+// 问：既然继承转组合，这里为什么又要继承Stream？
+// 答：这是为了遵守接口的合约，属于接口继承
+
+// decorator模式的特征：对Stream类，既继承又组合
+class CryptoStream : public Stream {
+
+    // 组合：复用实现
+    Stream *stream;  // 运行时装配：new FileStream? new NetworkStream? new MemoryStream
+
+public:
+    CryptoStream(Stream *_ps) : stream(_ps) {
+
+    }
+
+    char read(int number) override {
+        // 额外的加密操作
+
+        stream->read(number);
+
+        // 额外的加密操作
+    }
+
+    void seek(int position) override {
+        // 额外的加密操作
+
+        stream->seek(position); 
+
+        // 额外的加密操作
+    }
+
+    void write(char data) override {
+        // 额外的加密操作
+
+        stream->write(data);
+
+        // 额外的加密操作
+    }
+};
+
+// 扩展操作2: 比如需要对流进行缓存
+class BufferedStream : public Stream {
+
+    Stream *stream;  // 运行时装配：new FileStream? new NetworkStream? new MemoryStream
+
+public:
+    BufferedStream(Stream *_ps) : stream(_ps) {
+
+    }
+    // ...
+};
+
+
+void process() {
+    
+    /** 运行时装配 */ 
+
+    // 文件流
+    Stream *fs0 = new FileStream();
+    // 加密文件流
+    Stream *fs1 = new CryptoStream(fs0);
+    // 缓存文件流
+    Stream *fs2 = new BufferedStream(fs0);
+    // 既加密又缓存
+    Stream *fs3 = new CryptoStream(fs2);
+
+    delete fs0;
+    delete fs1;
+    delete fs2;
+    delete fs3;
+}
+```
+Decorator模式的特征：对Stream类，既继承又组合。这里继承是接口继承，遵守接口合约；组合是复用实现。
+
+构造函数还有重复代码，还可以继续优化，**增加一个Decorator中间基类**。一个标准的decorator代码如下：
+
+[完整示例代码](./Decorator/decorator3.cpp)
+
+```c++
+// 业务操作
+#include <bits/types/FILE.h>
+#include <iostream>
+#include <memory>
+
+class Stream {
+public:
+    virtual char read(int number)=0;
+    virtual void seek(int position)=0;
+    virtual void write(char data)=0;
+    virtual ~Stream() {}
+};
+
+// 主体类
+class FileStream: public Stream {
+public:
+    char read(int number) override {
+        // 读文件流
+    }
+
+    void seek(int position) override {
+        // 定位文件流
+    }
+
+    void write(char data) override {
+        // 写文件流
+    }
+};
+
+// 主体类
+class NetworkStream: public Stream {
+public:
+    char read(int number) override {
+        // 读网络流
+    }
+
+    void seek(int position) override {
+        // 定位网络流
+    }
+
+    void write(char data) override {
+        // 写网络流
+    }
+};
+
+// 主体类
+class MemoryStream: public Stream {
+public:
+    char read(int number) override {
+        // 读内存流
+    }
+
+    void seek(int position) override {
+        // 定位内存流
+    }
+
+    void write(char data) override {
+        // 写内存流
+    }
+};
+
+// 中间基类，去除构造函数重复代码
+class DecoratorStream: public Stream {
+
+protected:
+    std::unique_ptr<Stream> s; // 运行时装配：new FileStream? new NetworkStream? new MemoryStream
+
+    DecoratorStream(std::unique_ptr<Stream> _s) : s(std::move(_s)) {
+
+    }
+
+};
+
+// 扩展操作1: 比如需要对流进行加密
+class CryptoStream : public DecoratorStream { 
+
+public:
+
+    // 使用父类构造器
+    using DecoratorStream::DecoratorStream;
+
+    char read(int number) override {
+        // 额外的加密操作
+
+        s->read(number);
+
+        // 额外的加密操作
+    }
+
+    void seek(int position) override {
+        // 额外的加密操作
+
+        s->seek(position); 
+
+        // 额外的加密操作
+    }
+
+    void write(char data) override {
+        // 额外的加密操作
+
+        s->write(data);
+
+        // 额外的加密操作
+    }
+};
+
+// 扩展操作2: 比如需要对流进行缓存
+class BufferedStream : public DecoratorStream {
+
+public:
+
+    // 使用父类构造器
+    using DecoratorStream::DecoratorStream;
+
+    char read(int number) override {
+        // 额外的缓存操作
+
+        s->read(number);
+
+        // 额外的缓存操作
+    }
+
+    void seek(int position) override {
+        // 额外的缓存操作
+
+        s->seek(position); 
+
+        // 额外的缓存操作
+    }
+
+    void write(char data) override {
+        // 额外的缓存操作
+
+        s->write(data);
+
+        // 额外的缓存操作
+    }
+};
+
+
+void process() {
+    
+    /** 运行时装配 */ 
+
+    std::unique_ptr<Stream> ps = make_unique<FileStream>();
+    std::unique_ptr<CryptoStream> cs = make_unique<FileStream>(ps);
+    std::unique_ptr<BufferedStream> bcs = make_unique<FileStream>(cs);
+    
+}
+```
+
+模式定义：**动态（组合）**地给一个对象增加一些额外的职责。就增加功能而言，Decorator模式**生成子类（静态）**更为灵活（消除重复代码 & 减少子类个数）
+
+Decorator模式的类图：
+
+![](./Decorator/decorator.png)
+
+从这个图可以看到：Decorator继承了Component又组合的Component
+
+### Decorator模板实现
+
+**设计习语：Mixin 混入类**
+1. Mixin使用模板参数作为派生类的基类，从而便捷地为类型提供扩展功能
+2. 采用变参基类，可以方便进行多个类混入设计
+3. Mixin在组合多个类功能时，多个类之间的设计是正交的
+4. Mixin通过模板参数的编译时装配，提供了在**Decorator模式运行时装配之外一种灵活选择**。
+
+
+早期混入类是用来替代多继承。这里用混入类实现Decorator模式。先看下混入类示例：
+
+[完整示例代码](./Decorator/mixin1.cpp)
+
+```c++
+#include <iostream>
+
+using namespace std;
+
+template<typename... Mixins>
+class Point : public Mixins...  // Point类有个：变参基类
+{    
+public:
+    double x, y;
+    // 调用多个基类的缺省构造函数
+    Point() : Mixins()..., x(0.0), y(0.0) {}
+    Point(double x, double y) : Mixins()..., x(x), y(y) {}
+};
+
+
+template<typename... Mixins>
+class Line : public Mixins...  // Line类有个：变参基类
+{    
+public:
+    double x, y;
+    // 调用多个基类的缺省构造函数
+    Line() : Mixins()..., x(0.0), y(0.0) {}
+    Line(double x, double y) : Mixins()..., x(x), y(y) {}
+};
+
+/** 接下来要给Point和Line添加Label和Color功能 */
+
+class Label
+{
+public:
+    std::string label;
+    Label() : label("") {}
+};
+
+class Color
+{
+public:
+    unsigned char red = 0, green = 0, blue = 0;
+};
+
+
+/** 以及为： Mixin设计 */
+
+// LabelPoint就具有了Point和Label的双重功能
+// 相当于：class LabelPoint : public Point, public Label {};
+using LabelPoint = Point<Label>;
+
+// ColorPoint 具有Point和Color的双重功能
+// 相当于：class ColorPoint : public Point, public Color {};
+using ColorPoint = Point<Color>;
+
+// LabelColorPoint 具有Point，Label，Color三种功能
+// 相当于：class LabelColorPoint : public Point, public Label, public Color {};
+using LabelColorPoint = Point<Label, Color>;
+
+int main () {
+
+    // 如果不想用别名，可以直接：Point<Label, Color> pt;
+    LabelColorPoint pt;
+
+    // Point属性
+    pt.x = 100;
+    pt.y = 200;
+    // Label属性
+    pt.label="2D";
+    // Color属性
+    pt.red=255;
+    pt.green=255;
+    pt.blue=255;
+}
+```
+巧用**泛型模板（变参基类）**技术，避免了子类爆炸，即为Mixin（混入类）设计习语。混入类功能要满足正交关系，功能不重复。
+
+接下来，看如何用Mixin实现Decorator设计模式：
+
+[完整示例代码](./Decorator/decorator2.cpp)
+
+```c++
+// 业务操作
+#include <iostream>
+#include <memory>
+
+using namespace std;
+
+class Stream {
+public:
+    virtual char read(int number) {
+        cout << "Stream.read()" << endl;
+    }
+    virtual void seek(int position) {
+        cout << "Stream.seek()" << endl;
+    }
+    virtual void write(char data) {
+        cout << "Stream.write()" << endl;
+    }
+    virtual ~Stream() {}
+};
+
+// 主体类
+class FileStream: public Stream {
+public:
+    char read(int number) override {
+        // 读文件流
+    }
+
+    void seek(int position) override {
+        // 定位文件流
+    }
+
+    void write(char data) override {
+        // 写文件流
+    }
+};
+
+// 主体类
+class NetworkStream: public Stream {
+public:
+    char read(int number) override {
+        // 读网络流
+    }
+
+    void seek(int position) override {
+        // 定位网络流
+    }
+
+    void write(char data) override {
+        // 写网络流
+    }
+};
+
+// 主体类
+class MemoryStream: public Stream {
+public:
+    char read(int number) override {
+        // 读内存流
+    }
+
+    void seek(int position) override {
+        // 定位内存流
+    }
+
+    void write(char data) override {
+        // 写内存流
+    }
+};
+
+/** 下面就是Mixin设计实现Decorator */
+
+/** 模板参数，解决了子类爆炸问题 */
+template <typename StreamType>
+class CryptoStream : public Stream, public StreamType  // 继承的是：模板参数
+{
+public:
+    char read(int number) override {
+        cout << "read 加密..." << endl;
+
+        StreamType::read(number);
+    }
+
+    void seek(int position) override {
+        cout << "seek 加密..." << endl;
+
+        StreamType::seek(position);
+    }
+
+    void write(char data) override {
+        cout << "write 加密..." << endl;
+
+        StreamType::write(data);
+    }
+};
+
+
+template <typename StreamType>
+class BufferedStream : public StreamType  // 继承的是：模板参数
+{
+public:
+    char read(int number) {
+        cout << "read 缓存..." << endl;
+
+        StreamType::read(number);
+    }
+
+    void seek(int position) {
+        cout << "seek 缓存..." << endl;
+
+        StreamType::seek(position);
+    }
+
+    void write(char data) {
+        cout << "write 缓存..." << endl;
+
+        StreamType::write(data);
+    }
+};
+
+int main() {
+
+    // 既加密又缓存的网络流
+    CryptoStream<BufferedStream<NetworkStream>> stream;
+    // 加密、缓存、网络流
+    stream.read(0);
+}
+```
+**要点总结**：
+* Minxin设计：模板参数可以让你在编译时很方便的实现功能组合。
 
