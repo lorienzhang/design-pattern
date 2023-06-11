@@ -2142,7 +2142,7 @@ public:
 ## <a name="11"></a>11. Decorator模式
 软件设计的SOLID原则，其中S就是单一职责原则。如果责任划分不清晰，使用继承得到的结果往往随着需求变化，子类急剧膨胀，同时充斥着重复代码，这时的关键在于划清责任。
 
-### Decorator面向对象
+### Decorator模式(面向对象)
 
 先看例子：
 
@@ -2341,7 +2341,7 @@ void process() {
 }
 ```
 
-2个主体类：FileStream, MemoryStream, NetworkStream，2个扩展：Crypto, Buffered。
+3个主体类：FileStream, MemoryStream, NetworkStream，2个扩展功能：Crypto, Buffered。
 
 如果通过继承的方式完成扩展，会发现子类数量爆炸。而且里面重复代码非常多。
 
