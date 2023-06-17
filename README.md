@@ -3003,6 +3003,7 @@ class MyClass {
 public:
     // 必须自定义析构函数  
     ~MyClass();
+
     MyClass();
 
     MyClass::MyClass(const MyClass& other);
@@ -3014,12 +3015,11 @@ private:
     // 前置声明，类内类型（不想暴露给客户的数据成员，包装成另外一个类）
     class Impl;
 
-    // 实现类指针，且必须为指针（指针有个特点：不要求Impl是完整类型）
-    // 注意MyClass的析构函数必须自定义，因为编译自动生成的析构函数，会调用unique_ptr的析构，导致需要依赖Impl完整类型
+    // 注意MyClass的析构函数必须自定义，因为编译自动生成的析构函数，会调用unique_ptr的析构，这就导致找不到Impl定义
     unique_ptr<Impl> pimpl;
 };
 ```
-要点：析构函数需要自定义，否则编译会报错，依赖了Impl完整类型
+**要点**：析构函数需要自定义，否则编译会报错，因为编译自动生成的析构函数，会调用unique_ptr的析构，这就导致找不到Impl完整定义
 
 **MyClass2.cpp**
 ```c++
@@ -3051,7 +3051,10 @@ MyClass::MyClass() : pimpl(make_unique<Impl>())
 }
 
 // 析构
-MyClass::~MyClass()=default; // 这里生成的析构器可以看到Impl的定义
+
+// 如果是编译器自动生成的析构器，会在头文件中内联，导致找不到Impl定义
+// 这里生成的析构器可以看到Impl的定义，因为析构在cpp文件中生成。
+MyClass::~MyClass()=default; 
 
 // 移动构造，unique_ptr只支持移动
 MyClass::MyClass(MyClass&& other)=default;
@@ -3080,3 +3083,6 @@ void MyClass::process() {
     return pimpl->invoke();
 }
 ```
+要点：
+1. unique_ptr不支持拷贝构造和赋值操作符，需要自己实现
+2. unique_ptr只支持移动，但我们也需要将移动构造和移动赋值实现成default，因为这里编译器不会自动生成
