@@ -2916,7 +2916,7 @@ public:
     void process();
 
 private:
-    // 前置声明，类内类型（
+    // 前置声明，类内类型
     // 不想暴露给客户的数据成员，包装成另外一个类
     class Impl;
 
