@@ -2944,6 +2944,7 @@ public:
         std::cout << "Impl" << endl;
     }
 
+    // 藏到了cpp文件中
     String text;
     int data;
 };
