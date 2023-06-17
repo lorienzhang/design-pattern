@@ -22,6 +22,8 @@
 
 [11. Decorator模式](#11)
 
+[12. Birdge模式](#12)
+
 ## <a name="1"></a>1. 任何设计模式的最高宗旨（金科玉律）：高内聚，低耦合
 
 ## <a name="2"></a>2. 正交设计
@@ -2641,7 +2643,7 @@ void process() {
 }
 ```
 
-模式定义：**动态（组合）**地给一个对象增加一些额外的职责。就增加功能而言，Decorator模式**生成子类（静态）**更为灵活（消除重复代码 & 减少子类个数）
+模式定义：**动态**（组合）地给一个对象增加一些额外的职责。就增加功能而言，Decorator模式比**生成子类**（静态）更为灵活（消除重复代码 & 减少子类个数）
 
 Decorator模式的类图：
 
@@ -2734,7 +2736,7 @@ int main () {
     pt.blue=255;
 }
 ```
-巧用**泛型模板（变参基类）**技术，避免了子类爆炸，即为Mixin（混入类）设计习语。混入类功能要满足正交关系，功能不重复。
+巧用 **泛型模板**（变参基类）技术，避免了子类爆炸，即为Mixin（混入类）设计习语。混入类功能要满足正交关系，功能不重复。
 
 接下来，看如何用Mixin实现Decorator设计模式：
 
@@ -2870,3 +2872,210 @@ int main() {
 **要点总结**：
 * Minxin设计：模板参数可以让你在编译时很方便的实现功能组合。
 
+## <a name="12"></a>12. Bridge模式
+### Pimpl习语
+因为一些特殊的原因，你不想把类的数据成员暴露给类的使用者：
+1. 未来可能会改变它，这个改变不要影响类的使用者，不想和客户程序产生依赖关系
+2. 知识产权，机密性需求，不想让别人看到
+
+**Pimpl，Pointer to Implementation**，将类的数据成员声明为指针，指向某具体实现类或抽象类，从而实现稳定程序库。
+* 编译依赖：消除.h头文件对实现类的依赖（只需声明，而无需定义的不完整类型）。因为指针指向不完整类型是合法的。虽然.cpp实现文件内仍然需要实现类的定义（延迟依赖）。
+* 延迟分发：如果使用指针指向抽象类，则由于虚函数的多态分发，将函数调用延迟到运行时，将具有更好的弹性
+* 资源管理：在构造器中初始化实现类，在析构器中释放实现类。
+
+代码示例如下：
+```C++
+class MyClass {
+public:
+    ~MyClass();
+    MyClass();
+
+    MyClass::MyClass(const MyClass& other);
+    MyClass& MyClass::operator=(MyClass rhs);
+
+    void process();
+
+private:
+    string text;
+    int data;
+
+};
+```
+诉求：我们需要将text和data进行隐藏
+
+**MyClass1.h**
+```C++
+class MyClass {
+public:
+    ~MyClass();
+    MyClass();
+
+    MyClass::MyClass(const MyClass& other);
+    MyClass& MyClass::operator=(MyClass rhs);
+
+    void process();
+
+private:
+    // 前置声明，类内类型（
+    // 不想暴露给客户的数据成员，包装成另外一个类
+    class Impl;
+
+    // 实现类指针，且必须为指针（指针有个特点：不要求Impl是完整类型）
+    Impl* pimpl;    // Impl不完整类型
+
+};
+```
+
+**MyClass1.cpp**
+```C++
+// 想藏的东西在cpp文件中
+class MyClass::Impl
+{
+public:
+    virtual void invoke() {
+        std::cout << "invoke" << endl;
+    }
+
+    virtual ~Impl() {
+        std::cout << "~Impl" << endl;
+    }
+
+    Impl() {
+        std::cout << "Impl" << endl;
+    }
+
+    String text;
+    int data;
+};
+
+MyClass::MyClass() : pimpl(new Impl())
+{
+
+}
+
+MyClass::~MyClass()
+{
+    delete pimpl;
+}
+
+// 赋值与拷贝
+MyClass::MyClass(const MyClass& other) : pimpl(new Impl(*other.pimpl)) {
+
+}
+
+MyClass& MyClass::operator=(const MyClass& rhs) {
+    if (this == &rhs) {
+        return *this;
+    }
+
+    // copy & swap
+    MyClass temp(rhs);
+    swap(this->pimpl, temp.pimp);
+    return *this;
+}
+
+// 移动构造
+MyClass::MyClass(MyClass&& other) : pimpl(other.pimpl) {
+    other.pimpl = nullptr;
+}
+
+// 移动赋值
+MyClass& MyClass::operator=(MyClass&& rhs) {
+    if (this == &rhs) {
+        return *this;
+    }
+
+    MyClass temp(std::move(rhs));
+    swap(this->pimpl, temp.pimpl);
+    return *this;
+}
+
+void MyClass::process() {
+    return pimpl->invoke();
+}
+```
+以上是Pimpl裸指针版，下面看下智能指针（unique_ptr）版实现。智能指针版的pimpl需要正确实现5大函数（构造，拷贝构造，赋值，移动构造，移动赋值）
+
+**MyClass2.h**
+```C++
+class MyClass {
+public:
+    // 必须自定义析构函数  
+    ~MyClass();
+    MyClass();
+
+    MyClass::MyClass(const MyClass& other);
+    MyClass& MyClass::operator=(MyClass rhs);
+
+    void process();
+
+private:
+    // 前置声明，类内类型（不想暴露给客户的数据成员，包装成另外一个类）
+    class Impl;
+
+    // 实现类指针，且必须为指针（指针有个特点：不要求Impl是完整类型）
+    // 注意MyClass的析构函数必须自定义，因为编译自动生成的析构函数，会调用unique_ptr的析构，导致需要依赖Impl完整类型
+    unique_ptr<Impl> pimpl;
+};
+```
+要点：析构函数需要自定义，否则编译会报错，依赖了Impl完整类型
+
+**MyClass2.cpp**
+```c++
+#include <iostream>
+
+// 想藏的东西在cpp文件中
+class MyClass::Impl
+{
+public:
+    virtual void invoke() {
+        std::cout << "invoke" << endl;
+    }
+
+    virtual ~Impl() {
+        std::cout << "~Impl" << endl;
+    }
+
+    Impl() {
+        std::cout << "Impl" << endl;
+    }
+
+    String text;
+    int data;
+};
+
+MyClass::MyClass() : pimpl(make_unique<Impl>())
+{
+
+}
+
+// 析构
+MyClass::~MyClass()=default; // 这里生成的析构器可以看到Impl的定义
+
+// 移动构造，unique_ptr只支持移动
+MyClass::MyClass(MyClass&& other)=default;
+
+// 移动赋值
+MyClass& MyClass::operator=(MyClass&& rhs)=default;
+
+/** unique_ptr不支持拷贝构造和赋值操作符，需要自己实现 */ 
+
+// 拷贝构造
+MyClass::MyClass(const MyClass& other) : pimpl(make_unique<Impl>(*other.pimpl)) {
+
+}
+
+// 赋值
+MyClass& MyClass::operator=(const MyClass& rhs) {
+    if (this == &rhs) {
+        return *this;
+    }
+
+    *pimpl=*rhs.pimpl;
+    return *this;
+}
+
+void MyClass::process() {
+    return pimpl->invoke();
+}
+```
