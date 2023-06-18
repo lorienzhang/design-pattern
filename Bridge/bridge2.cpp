@@ -1,10 +1,17 @@
+#include <memory>
+
 // 业务抽象
 class Messager 
 {
 protected:
-    MessagerImp *messageImp;  // 指针，具体是PC平台还是Mobile平台，由未来运行时决定
+    std::unique_ptr<MessageImp> pmb; // 指针，具体是PC平台还是Mobile平台，由未来运行时决定
 
 public:
+
+    Messager(std::unique_ptr<MessagerImp> _pmb) : pmb(std::move(_pmb)) {
+
+    }
+
     virtual void login(string username, string password)=0;
     virtual void sendMessage(string message)=0;
     virtual void sendPicture(Image image)=0;
@@ -74,48 +81,56 @@ public:
 // 业务抽象
 class MessagerLite : public Messager
 {
+    MessagerLite(std::unique_ptr<MessagerImp> _pmb) : Messager(std::move(_pmb)) {
+
+    }
+
     virtual void login(string username, string password) {
-        messageImp->connect();
+        pmb->connect();
         // ................
     }
 
     virtual void sendMessage(string message) {
-        messageImp->writeText();
+        pmb->writeText();
         // ................
     }
 
     virtual void sendPicture(Image image) {
-        messageImp->drawShape();
+        pmb->drawShape();
         // ................
     }
 };
 
 class MessagerPerfect : public Messager
 {
+    MessagerPerfect(std::unique_ptr<MessagerImp> _pmb) : Messager(std::move(_pmb)) {
+        
+    }
+
     virtual void login(string username, string password) {
         // 比Lite版多了一些功能
-        messageImp->playSound();
+        pmb->playSound();
         // ****************
 
-        messageImp->connect();
+        pmb->connect();
         // ................
     }
 
     virtual void sendMessage(string message) {
         // 比Lite版多了一些功能
-        messageImp->playSound();
+        pmb->playSound();
         // ****************
 
-        messageImp->writeText();
+        pmb->writeText();
         // ................
     }
 
     virtual void sendPicture(Image image) {
         // 比Lite版多了一些功能
-        messageImp->playSound();
+        pmb->playSound();
         // ****************
         
-        messageImp->drawShape();
+        pmb->drawShape();
         // ................
     }
 };
@@ -123,7 +138,7 @@ class MessagerPerfect : public Messager
 void process() {
 
     // 使用：运行时装配，即运行时组合在一起
-    MessagerImp *mImp = new PCMessagerImp()
-    Messager *m = new MessagerPerfect(mImp);
+    std::unique_ptr<MessagerImp> pMsgImp = make_unique<MobileMessagerImp>();
+    std::unique_ptr<Messager> pMsg = make_unique<MessagerPerfect>(pMsgImp);
 
 }

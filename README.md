@@ -3346,9 +3346,14 @@ Bridge桥模式完整代码，如下：
 class Messager 
 {
 protected:
-    MessagerImp *messageImp;  // 指针，具体是PC平台还是Mobile平台，由未来运行时决定
+    std::unique_ptr<MessageImp> pmb; // 指针，具体是PC平台还是Mobile平台，由未来运行时决定
 
 public:
+
+    Messager(std::unique_ptr<MessagerImp> _pmb) : pmb(std::move(_pmb)) {
+
+    }
+
     virtual void login(string username, string password)=0;
     virtual void sendMessage(string message)=0;
     virtual void sendPicture(Image image)=0;
@@ -3418,48 +3423,56 @@ public:
 // 业务抽象
 class MessagerLite : public Messager
 {
+    MessagerLite(std::unique_ptr<MessagerImp> _pmb) : Messager(std::move(_pmb)) {
+
+    }
+
     virtual void login(string username, string password) {
-        messageImp->connect();
+        pmb->connect();
         // ................
     }
 
     virtual void sendMessage(string message) {
-        messageImp->writeText();
+        pmb->writeText();
         // ................
     }
 
     virtual void sendPicture(Image image) {
-        messageImp->drawShape();
+        pmb->drawShape();
         // ................
     }
 };
 
 class MessagerPerfect : public Messager
 {
+    MessagerPerfect(std::unique_ptr<MessagerImp> _pmb) : Messager(std::move(_pmb)) {
+        
+    }
+
     virtual void login(string username, string password) {
         // 比Lite版多了一些功能
-        messageImp->playSound();
+        pmb->playSound();
         // ****************
 
-        messageImp->connect();
+        pmb->connect();
         // ................
     }
 
     virtual void sendMessage(string message) {
         // 比Lite版多了一些功能
-        messageImp->playSound();
+        pmb->playSound();
         // ****************
 
-        messageImp->writeText();
+        pmb->writeText();
         // ................
     }
 
     virtual void sendPicture(Image image) {
         // 比Lite版多了一些功能
-        messageImp->playSound();
+        pmb->playSound();
         // ****************
         
-        messageImp->drawShape();
+        pmb->drawShape();
         // ................
     }
 };
@@ -3467,8 +3480,8 @@ class MessagerPerfect : public Messager
 void process() {
 
     // 使用：运行时装配，即运行时组合在一起
-    MessagerImp *mImp = new PCMessagerImp()
-    Messager *m = new MessagerPerfect(mImp);
+    std::unique_ptr<MessagerImp> pMsgImp = make_unique<MobileMessagerImp>();
+    std::unique_ptr<Messager> pMsg = make_unique<MessagerPerfect>(pMsgImp);
 
 }
 ```
@@ -3481,3 +3494,46 @@ GoF桥模式定义：将抽象部分（业务功能）与实现部分（平台�
 1. Bridge模式使用“对象间的组合关系”解耦了抽象与实现之间固有的绑定关系，使得抽象和实现可以沿着各自的维度来变化。所谓抽象和实现沿着各自的维度来变化，即"子类化"它们
 2. C++的多继承违背了单一职责原则，复用性比较差。所以Bridge模式比多继承方案使更好的解决方案。
 3. Bridge模式的应用一般在"两个非常强的变化维度"，有时候一个类也有多于两个的变化维度，这时可以使用Bridge的扩展模式。
+4. 桥模式要比Decorator模式更加常见
+
+Bridge的**扩展模式**：
+```c++
+class A
+{
+    f1();
+    f2();
+    f3();
+
+    f4();
+    f5();
+
+    f6();
+    f7();
+};
+```
+A中出现了3个变化方向。f1,f2,f3是一组，f4，f4是一组，f6，f7是一组。用桥模式做下拆分：
+```c++
+class A
+{
+    f1();
+    f2();
+    f3();
+
+    B *b;
+    C *c;
+
+};
+
+class B
+{
+    f4();
+    f5();
+};
+
+class C
+{
+    f6();
+    f7();
+};
+```
+其中A就是GoF模式定义中所说的的**抽象部分**，B，C为**实现部分**。
