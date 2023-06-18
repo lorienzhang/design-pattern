@@ -3269,6 +3269,12 @@ void process() {
     Messager *m = new MobileMessagerPerfect();
 }
 ```
+看下类的继承关系：
+
+![](./Bridge/bridge2.png)
+
+可以发现在同一个继承链上，出现了不同的变化方向，**这是不好的**。
+
 **继承开始分叉，出现了两个变化维度**。每装配一种功能都需要编写对应的子类，导致子类急剧膨胀同时充斥着重复代码。PCMessagerPerfect和MobileMessagerPerfect里面都存在结构性的重复。
 
 解决方案：**继承转组合**
