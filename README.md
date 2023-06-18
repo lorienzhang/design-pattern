@@ -22,7 +22,7 @@
 
 [11. Decorator模式](#11)
 
-[12. Birdge模式](#12)
+[12. Bridge模式](#12)
 
 ## <a name="1"></a>1. 任何设计模式的最高宗旨（金科玉律）：高内聚，低耦合
 
@@ -3083,6 +3083,395 @@ void MyClass::process() {
     return pimpl->invoke();
 }
 ```
-要点：
+**要点**：
 1. unique_ptr不支持拷贝构造和赋值操作符，需要自己实现
 2. unique_ptr只支持移动，但我们也需要将移动构造和移动赋值实现成default，因为这里编译器不会自动生成
+
+### Bridge
+和Decorator模式极其类似，属于单一职责类型的模式。主要为了解决，职责划分不清晰而导致：
+1. 子类急剧膨胀
+2. 充斥重复代码
+
+#### 动机
+* 某些类型的固有逻辑，使得它们具有两个或者多个变化维度
+* 如何应对这种“多维度变化”？如何利用面向对象技术来使得类型可以轻松沿着两个乃至多个方向变化，而不引入额外复杂度
+
+看一个通信模块设计的例子：
+
+```c++
+/** 一个简单的通信模块 */
+class Messager 
+{
+public:
+    virtual void login(string username, string password)=0;
+    virtual void sendMessage(string message)=0;
+    virtual void sendPicture(Image image)=0;
+
+    virtual void playSound()=0;
+    virtual void drawShape()=0;
+    virtual void writeText()=0;
+    virtual void connect()=0;
+
+    virtual ~Messager() {}
+};
+```
+**平台实现**
+```c++
+// PC平台
+class PCMessagerBase : public Messager
+{
+public:
+    virtual void playSound() {
+        // *****************
+    }
+
+    virtual void drawShape() {
+        // *****************
+    }
+
+    virtual void writeText() {
+        // *****************
+    }
+
+    virtual void connect() {
+        // *****************
+    }
+};
+
+// Mobile平台
+class MobileMessagerBase : public Messager
+{
+public:
+    virtual void playSound() {
+        // =================
+    }
+
+    virtual void drawShape() {
+        // =================
+    }
+
+    virtual void writeText() {
+        // =================
+    }
+
+    virtual void connect() {
+        // =================
+    }
+};
+```
+**业务抽象**，分位lite版和perfetect版，perfetct比lite要多一些功能。需要针对PC和Mobile分别实现
+```c++
+// 业务抽象：PC
+class PCMessagerLite : public PCMessagerBase
+{
+    virtual void login(string username, string password) {
+        PCMessagerBase::connect();
+        // ................
+    }
+
+    virtual void sendMessage(string message) {
+        PCMessagerBase::writeText();
+        // ................
+    }
+
+    virtual void sendPicture(Image image) {
+        PCMessagerBase::drawShape();
+        // ................
+    }
+};
+
+// perfetct业务功能和lite版的业务功能是不一样的
+class PCMessagerPerfect : public PCMessagerBase
+{
+    virtual void login(string username, string password) {
+        // 比Lite版多了一些功能
+        PCMessagerBase::playSound();
+        // ****************
+
+        PCMessagerBase::connect();
+        // ................
+    }
+
+    virtual void sendMessage(string message) {
+        // 比Lite版多了一些功能
+        PCMessagerBase::playSound();
+        // ****************
+
+        PCMessagerBase::writeText();
+        // ................
+    }
+
+    virtual void sendPicture(Image image) {
+        // 比Lite版多了一些功能
+        PCMessagerBase::playSound();
+        // ****************
+        
+        PCMessagerBase::drawShape();
+        // ................
+    }
+};
+
+// 业务抽象：Mobile
+class MobileMessagerLite : public MobileMessagerBase
+{
+    virtual void login(string username, string password) {
+        MobileMessagerBase::connect();
+        // ................
+    }
+
+    virtual void sendMessage(string message) {
+        MobileMessagerBase::writeText();
+        // ................
+    }
+
+    virtual void sendPicture(Image image) {
+        MobileMessagerBase::drawShape();
+        // ................
+    }
+};
+
+// perfetct业务功能和lite版的业务功能是不一样的
+class MobileMessagerPerfect : public MobileMessagerBase
+{
+    virtual void login(string username, string password) {
+        // 比Lite版多了一些功能
+        MobileMessagerBase::playSound();
+        // ****************
+
+        MobileMessagerBase::connect();
+        // ................
+    }
+
+    virtual void sendMessage(string message) {
+        // 比Lite版多了一些功能
+        MobileMessagerBase::playSound();
+        // ****************
+
+        MobileMessagerBase::writeText();
+        // ................
+    }
+
+    virtual void sendPicture(Image image) {
+        // 比Lite版多了一些功能
+        MobileMessagerBase::playSound();
+        // ****************
+        
+        MobileMessagerBase::drawShape();
+        // ................
+    }
+};
+
+```
+**使用**
+```c++
+void process() {
+    // 使用：编译时装配
+    Messager *m = new MobileMessagerPerfect();
+}
+```
+存在的问题和decorator模式类似，每装配一种功能都需要编写对应的子类，导致子类急剧膨胀同时充斥着重复代码。PCMessagerPerfect和MobileMessagerPerfect里面都存在结构性的重复。
+
+解决方案：**继承转组合**
+```c++
+// 业务抽象
+class MessagerLite
+{
+    // 运行时：new PCMessagerBase or new MobileMessagerBase
+    Messager *message; // 指针，具体是PC平台还是Mobile平台，由未来运行时决定
+    
+    virtual void login(string username, string password) {
+        message->connect();
+        // ................
+    }
+
+    virtual void sendMessage(string message) {
+        message->writeText();
+        // ................
+    }
+
+    virtual void sendPicture(Image image) {
+        message->drawShape();
+        // ................
+    }
+};
+
+class MessagerPerfect
+{
+    // 运行时：new PCMessagerBase or new MobileMessagerBase
+    Messager *message;  // 指针，具体是PC平台还是Mobile平台，由未来运行时决定
+
+    virtual void login(string username, string password) {
+        // 比Lite版多了一些功能
+        message->playSound();
+        // ****************
+
+        message->connect();
+        // ................
+    }
+
+    virtual void sendMessage(string message) {
+        // 比Lite版多了一些功能
+        message->playSound();
+        // ****************
+
+        message->writeText();
+        // ................
+    }
+
+    virtual void sendPicture(Image image) {
+        // 比Lite版多了一些功能
+        message->playSound();
+        // ****************
+        
+        message->drawShape();
+        // ................
+    }
+};
+```
+
+**还有一个问题**：new PCMessagerBase or new MobileMessagerBase，是无法实现的，因为它们还是虚基类，无法实例化。
+**解决方案**：Messager类设计不合理，里面含有两个变化维度，需要拆分
+
+Bridge桥模式完整代码，如下：
+
+[完整示例代码](./Bridge/bridge2.cpp)
+```c++
+// 业务抽象
+class Messager 
+{
+protected:
+    MessagerImp *messageImp;  // 指针，具体是PC平台还是Mobile平台，由未来运行时决定
+
+public:
+    virtual void login(string username, string password)=0;
+    virtual void sendMessage(string message)=0;
+    virtual void sendPicture(Image image)=0;
+
+    virtual ~Messager() {}
+};
+
+// 平台实现
+class MessagerImp
+{
+public:
+
+    virtual void playSound()=0;
+    virtual void drawShape()=0;
+    virtual void writeText()=0;
+    virtual void connect()=0;
+
+    virtual ~MessagerImp() {}
+};
+
+// Messager有一些功能需要去实现
+
+// 平台 (PC) 实现
+class PCMessagerImp : public MessagerImp
+{
+public:
+    virtual void playSound() {
+        // *****************
+    }
+
+    virtual void drawShape() {
+        // *****************
+    }
+
+    virtual void writeText() {
+        // *****************
+    }
+
+    virtual void connect() {
+        // *****************
+    }
+};
+
+// 平台 (Mobile) 实现
+class MobileMessagerImp : public MessagerImp
+{
+public:
+    virtual void playSound() {
+        // =================
+    }
+
+    virtual void drawShape() {
+        // =================
+    }
+
+    virtual void writeText() {
+        // =================
+    }
+
+    virtual void connect() {
+        // =================
+    }
+};
+
+/** 业务抽象：对不同平台还需要支持不同的功能 */ 
+
+// 业务抽象
+class MessagerLite : public Messager
+{
+    virtual void login(string username, string password) {
+        messageImp->connect();
+        // ................
+    }
+
+    virtual void sendMessage(string message) {
+        messageImp->writeText();
+        // ................
+    }
+
+    virtual void sendPicture(Image image) {
+        messageImp->drawShape();
+        // ................
+    }
+};
+
+class MessagerPerfect : public Messager
+{
+    virtual void login(string username, string password) {
+        // 比Lite版多了一些功能
+        messageImp->playSound();
+        // ****************
+
+        messageImp->connect();
+        // ................
+    }
+
+    virtual void sendMessage(string message) {
+        // 比Lite版多了一些功能
+        messageImp->playSound();
+        // ****************
+
+        messageImp->writeText();
+        // ................
+    }
+
+    virtual void sendPicture(Image image) {
+        // 比Lite版多了一些功能
+        messageImp->playSound();
+        // ****************
+        
+        messageImp->drawShape();
+        // ................
+    }
+};
+
+void process() {
+
+    // 使用：运行时装配，即运行时组合在一起
+    MessagerImp *mImp = new PCMessagerImp()
+    Messager *m = new MessagerPerfect(mImp);
+
+}
+```
+
+GoF桥模式定义：将抽象部分（业务功能）于实现部分（平台实现）分离，使它们都可以独立地变化。类图如下：
+
+![](./Bridge/bridge.png)
+
+**要点总结**：
+1. Bridge模式使用“对象间的组合关系”解耦了抽象与实现之间固有的绑定关系，使得抽象和实现可以沿着各自的维度来变化。所谓抽象和实现沿着各自的维度来变化，即"子类化"它们
+2. C++的多继承违背了单一职责原则，复用性比较差。所以Bridge模式比多继承方案使更好的解决方案。
+3. Bridge模式的应用一般在"两个非常强的变化维度"，有时候一个类也有多余两个的变化维度，这时可以使用Bridge的扩展模式。
