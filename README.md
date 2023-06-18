@@ -24,6 +24,8 @@
 
 [12. Bridge模式](#12)
 
+[13. Command模式](#13)
+
 ## <a name="1"></a>1. 任何设计模式的最高宗旨（金科玉律）：高内聚，低耦合
 
 ## <a name="2"></a>2. 正交设计
@@ -3537,3 +3539,108 @@ class C
 };
 ```
 其中A就是GoF模式定义中所说的的**抽象部分**，B，C为**实现部分**。
+
+## <a name="13"></a>13. Command 命令模式
+在组件构建过程中，组件行为的变化经常导致组件本身剧烈变化。需要将组件的行为和组件本身进行解耦，从而支持组件行为的变化，实现两者松耦合。
+
+* Command模式的**动机**：在软件构建过程中，"行为请求者"与"行为实现者"通常呈现紧耦合。但在某些场合——比如需要对行为进行“记录、undo、redo、事务”等处理，这种紧耦合就显得不合适。
+* 问：如何将“行为请求者”与“行为实现者”解耦？答：行为对象化
+
+**command模式定义**（GoF）：将一个请求(行为)封装为对象，从而使你可用不同的行为对客户进行参数化；对行为排队或者记录行为日志，以及支持行为撤销操作。
+
+看一个菜单设计的示例：
+```C++
+class Command
+{
+public:
+    virtual void execute()=0;
+};
+
+class CopyCommand : public Command 
+{
+    int id;
+    string arg;
+public:
+    CopyCommand(const string& a) : arg(a) {}
+
+    void execute() override {
+        cout << "#1 process..." << arg << endl;
+    }
+};
+
+class CutCommand : public Command 
+{
+    int arg;
+public:
+    CutCommand(const int& a) : arg(a) {}
+
+    void execute() override {
+        cout << "#2 process..." << arg << endl;
+    }
+};
+
+class PasteCommand : public Command 
+{
+    int arg;
+public:
+    PasteCommand(const int& a) : arg(a) {}
+
+    void execute() override {
+        cout << "#2 process..." << arg << endl;
+    }
+};
+
+class MacroCommand : public Command 
+{
+    vector<unique_ptr<Command>> commands;
+
+public:
+    void addCommand(unique_ptr<Command> c) {
+        // unique_ptr不支持拷贝，需要使用的移动的方式将所有权转进来
+        commands.push_back(std::move(c));
+    }
+
+    void execute() override {
+        for (auto &c : commands) {
+            c->execute();
+        }
+    }
+};
+```
+**使用: **
+```c++
+int main() {
+
+    auto cmd1 = make_unique<CopyCommand>("Arg ###");
+    auto cmd2 = make_unique<CutCommand>(100);
+
+    MacroCommand macro;
+    macro.addCommand(std::move(cmd1));
+    macro.addCommand(std::move(cmd2));
+
+    macro.execute();
+}
+
+```
+cmd1, cmd2, macro都是对象，但本质上表征的是行为。这就是行为对象化。command模式类图如下：
+
+![](./command/comand.png)
+
+其实C++本身的语言机制，天然支持command模式，即：函数对象。函数对象的多态性靠模板参数实现的，所以函数对象本质上也是：行为对象化。所以，C++出现函数对象后，**以虚函数为设计基础的command在C++就不是很流行了**。
+```c++
+template<typename T>
+class FunctionObject
+{
+public:
+    void operator()(T data) {
+
+    }
+};
+```
+
+**要点总结：**
+1. Command模式根本目的将“行为请求者”与“行为实现者”解耦，在面向对象语言中，常见的实现手段是“将行为抽象为对象”
+2. Command模式面向对象实现和泛型实现有所区别：面向对象使用“接口-实现”来定义行为接口规范，更严格；泛型版C++函数对象以函数签名来定义行为接口规范，更灵活，也更高效
+3. Command和Strategy的代码非常相似，其实泛型版Command和Strategy就不区分了。面向对象里面，Command侧重定义：做什么；Strategy侧重定义：怎么做。
+4. Observer模式看着也像是Command模式的一种应用
+
