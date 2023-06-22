@@ -26,6 +26,8 @@
 
 [13. Command模式](#13)
 
+[14. Visitor模式](#14)
+
 ## <a name="1"></a>1. 任何设计模式的最高宗旨（金科玉律）：高内聚，低耦合
 
 ## <a name="2"></a>2. 正交设计
@@ -3643,4 +3645,354 @@ public:
 2. Command模式面向对象实现和泛型实现有所区别：面向对象使用“接口-实现”来定义行为接口规范，更严格；泛型版C++函数对象以函数签名来定义行为接口规范，更灵活，也更高效
 3. Command和Strategy的代码非常相似，其实泛型版Command和Strategy就不区分了。面向对象里面，Command侧重定义：做什么；Strategy侧重定义：怎么做。
 4. Observer模式看着也像是Command模式的一种应用
+
+## <a name="14"></a>14. Visitor模式
+
+**动机**：在软件构建过程中，由于需求的改变，某些类的层次结构中常常需要增加新的行为（方法），如果直接在基类中做更改，将会给子类带来繁重的负担，甚至破坏了原有的设计。
+
+如何在不更改类层次结构的前提下，在运行时根据类层次结构透明地为类层次结构上的各个类动态添加新的操作？（开闭原则）
+
+看一个例子：
+```c++
+class Shape 
+{
+public:
+    virtual ~Shape() {}
+    Shape(const std::string& color) : color_(color) {}
+    const std::string& color() const { return color_; }
+
+private:
+    std::string color_:
+};
+
+class Circle : public Shape
+{
+public:
+    Circle(const std::string &color) : Shape(color) {}
+};
+
+class Triangle : public Shape
+{
+public:
+    Triangle(const std::string &color) : Shape(color) {}
+};
+```
+上面是一个Shape的类层次结构，如果想要为这个Shape类的层次结构动态添加一些方法又不改变原有的类，怎么实现呢？
+
+Visitor模式是怎么解决这种问题：
+```c++
+#include <iostream>
+
+using namespace std;
+
+/** visitor必须要Shape的子类都放进来，这里就是Visitor模式的缺点：要求太严格 */
+class Circle;
+class Triangle;
+
+class ShapeVisitor
+{
+public:
+    virtual void visit(Circle* c) = 0;
+    virtual void visit(Triangle* t) = 0;
+};
+
+class Shape 
+{
+public:
+    virtual ~Shape() {}
+    Shape(const std::string& color) : color_(color) {}
+    const std::string& color() const { return color_; }
+
+    /** 预期到未来可能会增加若干行为 */
+    virtual void accept(ShapeVisitor& v) = 0;
+
+private:
+    std::string color_;
+};
+
+class Circle : public Shape
+{
+public:
+    Circle(const std::string &color) : Shape(color) {}
+
+    void accept(ShapeVisitor& v) {
+        // 重载，根据this指针找到对应的visit方法
+        v.visit(this);
+    }
+};
+
+class Triangle : public Shape
+{
+public:
+    Triangle(const std::string &color) : Shape(color) {}
+
+    void accept(ShapeVisitor& v) {
+        // 重载，根据this指针找到对应的visit方法
+        v.visit(this);
+    }
+};
+```
+以上是Shape类库开发人员编写，结构稳定。
+
+当应用开发人员想给Shape类层次结构动态添加行为，代码如下：
+```c++
+class DrawingVisitor : public ShapeVisitor
+{
+public:
+    void visit(Circle* c) override {
+        cout << "drawing to the " << c->color() << "circle" << endl;
+    }
+
+    void visit(Triangle* c) override {
+        cout << "drawing to the " << c->color() << "triangle" << endl;
+    }
+};
+
+class ZoomingVisitor : public ShapeVisitor
+{
+public:
+    void visit(Circle* c) override {
+        cout << "zoom to the " << c->color() << "circle" << endl;
+    }
+
+    void visit(Triangle* c) override {
+    }
+};
+
+int main () {
+    Circle c("pie");
+    Triangle t("hill");
+
+    DrawingVisitor dv;
+    c.accept(dv);  // 双重分发
+    t.accept(dv);
+
+    ZoomingVisitor zv;
+    c.accept(zv);
+    t.accept(zv);
+}
+```
+**GoF模式定义**
+定义一个作用于某对象结构中各元素的操作。使得可以在不改变（稳定）各元素类的前提下定义（扩展）作用于这些元素的新操作（变化）
+
+**类层次结构**:
+
+![](./visitor/visitor.png)
+
+可以看出，visitor模式特别脆弱，它要求的稳定点太严格：整个类层次结构都必须是稳定的。经典visitor模式到这里就结束了。
+
+下面看下用C++泛型改进版，上面看到有一些重复代码：
+```c++
+class Circle : public Shape
+{
+public:
+    Circle(const std::string &color) : Shape(color) {}
+
+    void accept(ShapeVisitor& v) {
+        // 重载，根据this指针找到对应的visit方法
+        v.visit(this);
+    }
+};
+
+class Triangle : public Shape
+{
+public:
+    Triangle(const std::string &color) : Shape(color) {}
+
+    void accept(ShapeVisitor& v) {
+        // 重载，根据this指针找到对应的visit方法
+        v.visit(this);
+    }
+};
+```
+Circle和Triangle里面的accept方法看上去代码是重复的。我们可不可以把accept提到Shape父类中去？
+
+**CRTP**
+```c++
+#include <iostream>
+#include <memory>
+
+using namespace std;
+
+template <typename Derived>
+class Shape 
+{
+public:
+    virtual ~Shape() {}
+    Shape(const std::string& color) : color_(color) {}
+    const std::string& color() const { return color_; }
+
+    template <typename Visitor>
+    void accept(Visitor &v) {
+        // 转成未来的子类
+        v.visit(static_cast<Derived&>(*this));
+    }
+
+private:
+    std::string color_;
+};
+
+class Circle : public Shape<Circle>
+{
+public:
+    using Shape::Shape;
+};
+
+class Triangle : public Shape<Triangle>
+{
+public:
+    using Shape::Shape;
+};
+
+// 以上是稳定的，类库开发人员编写
+// =================================================================================
+// 以下是变化的，应用开发人员编写
+
+class DrawingVisitor
+{
+public:
+    void visit(Circle* c) {
+        cout << "drawing to the " << c->color() << "circle" << endl;
+    }
+
+    void visit(Triangle* c) {
+        cout << "drawing to the " << c->color() << "triangle" << endl;
+    }
+};
+
+class ZoomingVisitor
+{
+public:
+    void visit(Circle* c) {
+        cout << "zoom to the " << c->color() << "circle" << endl;
+    }
+
+    void visit(Triangle* c) {
+    }
+};
+
+int main () {
+    Circle c("pie");
+    Triangle t("hill");
+
+    DrawingVisitor dv;
+    c.accept(dv);  // 双重分发
+    t.accept(dv);
+
+    ZoomingVisitor zv;
+    c.accept(zv);
+    t.accept(zv);
+}
+```
+上面代码还有个很尴尬的问题：`class Circle : public Shape<Circle>`, `class Triangle : public Shape<Triangle>` Circle和Triangle已经是不同的基类了，无法把他们添加到vector集合里面，不支持多态。
+
+解决方案：**再加一层，CRTP作为中间层**，CRTP一般不要提到顶层类，一旦提到顶层的根类，就会有多态的问题。完整代码如下：
+```c++
+#include <algorithm>
+#include <iostream>
+#include <memory>
+#include <vector>
+
+using namespace std;
+
+class Circle;
+class Triangle;
+
+class ShapeVisitor
+{
+public:
+    virtual void visit(Circle& c) = 0;
+    virtual void visit(Triangle& t) = 0;
+};
+
+class Shape 
+{
+public:
+    virtual ~Shape() {}
+    Shape(const std::string& color) : color_(color) {}
+    const std::string& color() const { return color_; }
+
+    // accept提到基类
+    virtual void accept(ShapeVisitor& v) = 0;
+
+private:
+    std::string color_;
+};
+
+/** 中间层：CRTP */
+template<typename Derived>
+class Visitable : public Shape
+{
+public:
+    using Shape::Shape;
+    void accept(ShapeVisitor& v) override {
+        v.visit(static_cast<Derived&>(*this));
+    }
+};
+
+class Circle : public Visitable<Circle>
+{
+public:
+    using Visitable<Circle>::Visitable;
+};
+
+class Triangle : public Visitable<Triangle>
+{
+public:
+    using Visitable<Triangle>::Visitable;
+};
+
+// 以上是稳定的，类库开发人员编写
+// =================================================================================
+// 以下是变化的，应用开发人员编写
+
+class DrawingVisitor : public ShapeVisitor
+{
+public:
+    void visit(Circle& c) override{
+        cout << "drawing to the " << c.color() << "circle" << endl;
+    }
+
+    void visit(Triangle& c) override{
+        cout << "drawing to the " << c.color() << "triangle" << endl;
+    }
+};
+
+class ZoomingVisitor : public ShapeVisitor
+{
+public:
+    void visit(Circle& c) override {
+        cout << "zoom to the " << c.color() << "circle" << endl;
+    }
+
+    void visit(Triangle& c) override {
+    }
+};
+
+int main () {
+    
+    vector<unique_ptr<Shape>> v;
+
+    // make_unique返回的就是右值，不需要std::move
+    v.push_back(make_unique<Circle>("pie"));
+
+    unique_ptr<Triangle> p(new Triangle("hill"));
+    v.push_back(std::move(p));
+
+    v.push_back(make_unique<Circle>("ring"));
+
+    DrawingVisitor dv;
+    ZoomingVisitor zv;
+
+    for_each(v.begin(), v.end(),
+         [=](unique_ptr<Shape>& elem) mutable {
+                elem->accept(zv);   // 这里还是双重分发
+            }
+    );
+
+}
+```
+上面的visitor用了CRTP，但为了支持多态，还不能完全抛开虚函数。但一旦完全抛开虚函数，又有对象多态的存储问题。C++17中通过lambda overload结合std::variant也可以实现visitor模式。
+
+
 
