@@ -28,6 +28,14 @@
 
 [14. Visitor模式](#14)
 
+[15. Facade门面模式](#15)
+
+[16. Proxy代理模式](#16)
+
+[17. Adapter模式](#17)
+
+[18. 单例模式](#18)
+
 ## <a name="1"></a>1. 任何设计模式的最高宗旨（金科玉律）：高内聚，低耦合
 
 ## <a name="2"></a>2. 正交设计
@@ -2148,6 +2156,10 @@ public:
 ## <a name="11"></a>11. Decorator模式
 软件设计的SOLID原则，其中S就是单一职责原则。如果责任划分不清晰，使用继承得到的结果往往随着需求变化，子类急剧膨胀，同时充斥着重复代码，这时的关键在于划清责任。
 
+Decorator模式属于单一职责类型模式，单一职责模式包括：
+1. Decorator模式
+2. Bridge模式
+
 ### Decorator模式(面向对象)
 
 先看例子：
@@ -3994,5 +4006,209 @@ int main () {
 ```
 上面的visitor用了CRTP，但为了支持多态，还不能完全抛开虚函数。但一旦完全抛开虚函数，又有对象多态的存储问题。C++17中通过lambda overload结合std::variant也可以实现visitor模式。
 
+## <a name="15"></a>15. Facade门面模式
+门面模式可以划分到接口隔离模式类别当中，类似的模式有：
+1. Facade
+2. Proxy
+3. Adapter
+4. Mediator
+
+接口隔离模式：在组件构建当中，某些接口之间直接依赖常常带来很多问题、甚至根本无法实现。采用添加一层**间接**（稳定）接口，来隔离本来相互紧密关联的接口是一种常见解决方案。
+
+系统间的耦合复杂度：
+
+![](./facade/facade.png)
+
+* 上述A方案的问题在于客户和组件中各种复杂的子系统有了过多的耦合，随着外部客户程序和各子系统的演化，这种耦合会带来强烈的震动。
+* 如何简化外部客户程序和系统间的交互接口？
+
+**Facade模式GoF定义**：为子系统中的一组接口提供一个一致（稳定）的界面，Facade模式定义一个高层接口，这个接口使得这个子系统更加容易使用（复用）。
+
+Facade设计模式更注重从架构的层次去看整个系统，而不是单个类的层次结构。Facade很多时候更是一种架构设计模式。
+
+## <a name="16"></a>16. Proxy代理模式
+**动机**：在面向对象系统中，有些对象由于某种原因（比如对象创建开销很大，或者某些操作需要安全控制等）直接访问给使用者、或者系统结构带来很多麻烦。
+
+如何在不失去透明操作对象的同时来管理/控制这些对象的复杂性？增加一层间接层是软件开发中常见的解决方案。
+
+**Proxy模式GoF定义**：为其它对象提供一种代理以控制（隔离，使用接口）对这个对象的访问。
 
 
+**类结构**：
+
+![](./proxy/proxy.png)
+
+**示例代码**：
+```c++
+class ISubject
+{
+public:
+    virtual void process() = 0;
+};
+
+/** server-side object */
+class RealSubject : public ISubject
+{
+public:
+    void process() override {
+
+    }
+};
+
+// ****************************************
+
+// client-size 设计
+// proxy设计
+class SubjectProxy : public ISubject
+{
+public:
+    void process() override {
+        // 对RealSubject的一种间接访问
+        // ...
+    }
+};
+
+class ClientApp
+{
+    ISubject *subject;
+
+public:
+    ClientApp() {
+        subject = new SubjectProxy(...);
+    }
+
+    void doTask() {
+        // ...
+        subject->process();
+        // ...
+    }
+};
+```
+**要点总结**：
+* "增加一层间接层"是软件系统中许多复杂问题的一种常见解决方案。在面向对象系统中，直接使用某些对象会带来很多问题，作为间接层的proxy对象便是解决这一问题的常用手段
+* Proxy并不一定要求保持接口完整的一致性，只要能够实现间接控制，有时候损失一些透明性是可以接受的。
+
+
+## <a name="17"></a>17. Adapter适配器模式
+
+**动机**：在软件系统中，由于应用环境的变化，常常需要将"一些现存的对象"放在新的环境中应用，但新环境要求的接口是这些现存对象所不满足的。
+
+如何应对这种迁移的变化？如何既能利用现有对象的良好实现，同时又满足新的应用环境所要求的接口？
+
+**Adpater模式GoF定义**：将一个类的接口转换成客户希望的另一个接口。Adapter模式使得原本由于接口不兼容而不能一起工作的那些类可以一起工作。
+
+**adapter类图**：
+![](./adapter/adapter.png)
+
+**示例代码**：
+```c++
+#include <memory>
+#include <iostream>
+
+using namespace std;
+
+/** 目标接口（新接口） */
+class ITarget
+{
+public:
+    virtual void process() = 0;
+};
+
+/** 遗留接口（老接口） */
+class IAdaptee
+{
+public:
+    virtual void foo(int data) = 0;
+    virtual int bar() = 0;
+};
+
+class OldClass : public IAdaptee 
+{
+    // ...
+};
+
+// 对象适配器（继承新接口，组合老接口）
+class Adapter : public ITarget  // 继承--接口规约
+{
+protected:
+    unique_ptr<IAdaptee> pAdaptee;  // 组合--复用实现
+
+public:
+    Adapter(unique_ptr<IAdaptee> p) :pAdaptee(std::move(p)) {
+
+    }
+
+    void process() override {
+        int data = pAdaptee->bar();
+        pAdaptee->foo(data);
+    }
+};
+
+// 类适配器（多继承），不鼓励。
+class Adapter2 : public ITarget, 
+                protected OldClass {
+
+};
+
+int main() {
+    unique_ptr<IAdaptee> pAdaptee(new OldClass());
+
+    unique_ptr<ITarget> pTarget{std::move(pAdaptee)};
+
+    pTarget->process();
+}
+```
+
+**要点总结**：
+* Adapter模式主要应用于“希望复用一些现存的类，但是接口又与复用环境要求不一致的情况”，在遗留代码复用、类库迁移等方面非常有用
+* Adapter模式可以实现非常灵活。不必拘泥于GoF定义的接口，例如：完全可以将Adapter模式中的“现存对象”作为新的接口方法参数，来达到适配的目的。
+
+## <a name="18"></a>18. 单例模式
+**动机**：在软件系统中，经常有这样一些特殊类，必须保证在系统中只存在一个实例，才能确保它们的逻辑正确性，以及良好的效率
+
+如何绕过常规的构造器，提供一种机制来保证一个类只有一个实例？
+
+**实例代码**：
+```c++
+#include <iostream>
+#include <memory>
+#include <string>
+
+using namespace std;
+
+class Singleton 
+{
+private:
+    Singleton(int data) : m_data(data) {
+
+    }
+
+    Singleton(const Singleton& rhs) = delete;
+    Singleton& operator=(const Singleton& rhs) = delete;
+
+public:
+    void print() {
+        cout << m_data << endl;
+    }
+
+    static Singleton& getSingleton();
+
+private:
+    int m_data;
+};
+
+Singleton& Singleton::getSingleton() {
+    // C++11: 静态对象初始化本身不会导致数据竞争
+    // 但如果构造器内部使用共享数据，仍然有线程安全问题
+    static Singleton instance(100);
+    return instance;
+}
+
+int main() {
+    Singleton& s1 = Singleton::getSingleton();
+    Singleton& s2 = Singleton::getSingleton();
+
+    cout << &s1 << endl;
+    cout << &s2 << endl;
+}
+```
