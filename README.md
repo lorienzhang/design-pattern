@@ -36,6 +36,8 @@
 
 [18. 单例模式](#18)
 
+[19. Composite模式](#19)
+
 ## <a name="1"></a>1. 任何设计模式的最高宗旨（金科玉律）：高内聚，低耦合
 
 ## <a name="2"></a>2. 正交设计
@@ -4212,3 +4214,194 @@ int main() {
     cout << &s2 << endl;
 }
 ```
+
+## <a name="19"></a>19. Composite模式
+常常一些**组件在内部具有特定的数据结构**，如果让客户程序依赖这些特定的数据结构，将极大破坏组件的复用。这时候，将这些特定的数据结构封装在内部，**在外部提供统一的接口**，来实现与特定数据结构无关的访问，是一种行之有效的解决方案。
+
+"数据结构"模式的典型模式：
+1. Composite模式
+2. Iterator
+3. Chain of Responsibility
+
+Composite模式在UI图形系统中经常见到，示例代码：
+
+```c++
+#include <iostream>
+#include <iterator>
+#include <list>
+#include <memory>
+#include <string>
+#include <algorithm>
+
+using namespace std;
+
+/** 基类控件 */
+class Control
+{
+public:
+    virtual ~Control() {}
+
+    virtual bool isComposite() {
+        return false;
+    }
+
+    // 业务逻辑方法：可能是坐标移动、可能是背景色更改
+    virtual void process() = 0;
+};
+
+class Label : public Control
+{
+public:
+    void process() override {
+        cout << "...Label" << endl;
+    }
+
+    virtual ~Label() {
+        cout << "~Label" << endl;
+    }
+};
+
+class TexBox : public Control
+{
+public:
+    void process() override {
+        cout << "...TexBox" << endl;
+    }
+
+    virtual ~TexBox() {
+        cout << "~TexBox" << endl;
+    }
+};
+
+class Button : public Control
+{
+public:
+    void process() override {
+        cout << "...Button" << endl;
+    }
+
+    virtual ~Button() {
+        cout << "~Button" << endl;
+    }
+};
+
+/** 树形控件 */
+class ControlComposite : public Control
+{
+protected:
+    // 这里是shared_ptr，里面和外面要共享所有权
+    list<shared_ptr<Control>> children_;
+
+public:
+    list<shared_ptr<Control>> getChildren() {
+        return children_;
+    }
+
+    void add(const shared_ptr<Control>& component) {
+        this->children_.push_back(component);
+    }
+
+    void remove(const shared_ptr<Control>& component) {
+        children_.remove(component);
+    }
+
+    bool isComposite() override {
+        return true;
+    }
+
+    void process() override {
+        // 1. 处理当前树节点
+        cout << "...ControlComposite" << endl;
+
+        // 2. 处理所有子节点
+        for (auto& c : children_) {
+            c->process();   // 多态调用
+        }
+    }
+
+    virtual ~ControlComposite() {
+        cout << "~ControlComposite" << endl;
+    }
+};
+
+void invode(Control& item) {
+    // 用户程序不关心，item是叶子节点还是树节点
+    item.process();
+}
+
+int main() {
+    auto composite = make_shared<ControlComposite>();
+    {
+        auto c1 = make_shared<Label>();
+        auto c2 = make_shared<TexBox>();
+        auto c3 = make_shared<Button>();
+
+        composite->add(c1);
+        composite->add(c2);
+        composite->add(c3);
+
+        auto composite2 = make_shared<ControlComposite>();
+        composite2->add(c2);
+        composite->add(composite2);
+    }
+
+    cout << "------------process start" << endl;
+
+    composite->process();
+
+    cout << "------------process end" << endl;
+}
+```
+
+ **Composite模式GoF定义**：将对象组合成树形结构以表示"部分-整体"的层次结构，Composite使得用户对单个对象和组合对象的使用具有一致性（稳定）。
+
+ **类结构图**：
+
+ ![](./composite/composite.png)
+
+ GoF官方将Add，Remove，GetChild放到了Component基类当中，这个不太好。一般Add，Remove这些方法会放到下面Composite类中。
+
+ Composite模式结构比较简单。思考下：**如果类库设计者不遵循Composite模式，会给应用程序带来什么问题**。
+ ```c++
+class ControlComposite : public Control
+{
+protected:
+    list<shared_ptr<Control>> children_;
+
+public:
+    ...
+
+    void process() override {
+        // 1. 处理当前树节点
+        cout << "...ControlComposite" << endl;
+
+        // 不遵循Composite模式，这里不处理子节点
+
+        // for (auto& c : children_) {
+        //     c->process();   // 多态调用
+        // }
+    }
+
+    virtual ~ControlComposite() {
+        cout << "~ControlComposite" << endl;
+    }
+};
+ ```
+ **对client应用程序的影响：**
+ ```c++
+void invoke(const Control& item) {
+    if (item.isComposite()) {
+        const ControlComposite& composite = dynamic_cast<const ControlComposite&>(item);
+        list<shared_ptr<Control>> list = composite.getChildren();
+        for(auto& c : list) {
+            // 递归的压力给到client客户程序，客户程序使用就非常痛苦
+            invoke(*c);
+        }
+    } else {
+        item.process();
+    }
+}
+ ```
+ **组合模式要点**：
+ 1. Composite模式采用树形结构实现对象容器，从而将"一对多"的关系转化为"一对一"的关系，使得客户代码可以一致地处理（复用）对象和对象容器，无需关心处理的是单个对象，还是组合的对象容器。
+ 2. 将**客户代码与复杂的对象容器结构**解耦是composite模式的核心，解耦之后，**客户代码只与抽象接口发生依赖，而非对象容器内部实现结构**。
