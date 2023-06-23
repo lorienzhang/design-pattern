@@ -47,6 +47,28 @@
 [23. Builder模式](#23)
 
 ## <a name="1"></a>1. 任何设计模式的最高宗旨（金科玉律）：高内聚，低耦合
+### 什么时候不用模式
+* 代码可读性差
+* 需求理解还很浅
+* 变化没有显现
+* 不是系统的关键依赖点
+* 项目没有复用价值
+* 项目没有发布时
+
+### 设计模式经验之谈
+* 代码质量优于模式
+* 不要为模式而模式
+* 关注抽象类 & 接口
+* 理清变化点和稳定点
+* 审视依赖关系
+* 理清编译时多态（泛型）和运行时多态（OO）
+* 良好的设计时演化的结果
+
+### 设计模式心得
+* 手中无剑，心中无剑（见模式而不知）
+* 手中有剑，心中无剑（可以识别模式，作为应用开发人员使用模式）
+* 手中有剑，心中有剑（作为框架开发人员为应用设计某些模式）
+* 手中无剑，心中有剑（忘掉模式，只有原则和技法）
 
 ## <a name="2"></a>2. 正交设计
 ### 软件设计正交性
@@ -163,6 +185,31 @@ RAII核心优势：
 2. 代码回退
 
 [参考示例代码](./ScopeGuard/ScopeGuard.cpp)
+
+### CRTP 奇异递归模板
+是一种在编译期实现多态的方法，是对运行时多态一种优化，多态是个很好的特性，但是动态绑定比较慢，因为要查虚函数表。而使用 CRTP，完全消除了动态绑定，降低了继承带来的虚函数表查询开销。
+
+**CRTP显著特征**：在基类模板参数传入子类类型
+
+### pImpl - pointer to implementation
+Pimpl是一种广泛使用的削减编译依赖项的技术，可以将头文件中的变化隔离到cpp文件的实现中，保证了对外接口不变
+
+### Policy Design
+Strategy模式的泛型版。基于策略设计又名policy-based class design 是一种基于C++计算机程序设计模式，以策略（Policy）为基础，并结合C++的模板的元编程。 policy 拆解时，必须要尽可能达成正交分解，policy之间最好彼此独立运作，不相互影响。
+```c++
+template<class T, template< class > class ReadPolicy, template< class > class WritePolicy>
+class ResourceManager : public ReadPolicy<T>, public WritePolicy<T>
+{
+public:
+    void read();
+    void write();
+};
+
+int main() {
+    ResourceManager<AnimationEntity, BinaryReader, BinaryWriter> resManager1;
+    ResourceManager<ScriptEntity, TextReader, TextWriter> resManager2;
+}
+```
 
 ## <a name="7"></a>7. Template Method模式
 “组件和应用”通常有所谓的稳定点和扩展点，"晚期扩展"模式通过晚期绑定，来实现组件和应用之间的松耦合。是二者协作的常用模式。
