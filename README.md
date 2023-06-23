@@ -38,6 +38,10 @@
 
 [19. Composite模式](#19)
 
+[20. Iterator模式](#20)
+
+[21. Chain of Responsibility 职责链](#21)
+
 ## <a name="1"></a>1. 任何设计模式的最高宗旨（金科玉律）：高内聚，低耦合
 
 ## <a name="2"></a>2. 正交设计
@@ -4405,3 +4409,204 @@ void invoke(const Control& item) {
  **组合模式要点**：
  1. Composite模式采用树形结构实现对象容器，从而将"一对多"的关系转化为"一对一"的关系，使得客户代码可以一致地处理（复用）对象和对象容器，无需关心处理的是单个对象，还是组合的对象容器。
  2. 将**客户代码与复杂的对象容器结构**解耦是composite模式的核心，解耦之后，**客户代码只与抽象接口发生依赖，而非对象容器内部实现结构**。
+
+ ## <a name="20"></a>20. Iterator模式
+ **动机**：在软件构建过程中，集合对象内部结构常常变化各异。但对于这些集合对象，我们希望在不暴露其内部结构的同时，可以让外部客户代码透明的访问其中包含的元素，即：透明遍历。
+
+ **GoF定义**：提供一种方法顺序访问一个聚合对象中的各个元素，而又不暴露（稳定）该对象的内部表示。
+
+ OO经典迭代器实现:
+ ```c++
+#include <iostream>
+#include <string>
+
+using namespace std;
+
+template<typename T>
+class Iterator
+{
+public:
+    virtual void first() = 0;
+    virtual void next() = 0;
+    virtual void iSDone() = 0;
+    virtual T& current() = 0;
+};
+
+/** 集合 */
+template<typename T>
+class MyCollection
+{
+public:
+    Iterator<T> getIterator() {
+        // ....
+    }
+};
+
+/** 迭代器实现 */
+template<typename T>
+class CollectionIterator : public Iterator<T>
+{
+    // 集合
+    MyCollection<T> mc;
+
+public:
+    CollectionIterator(const MyCollection<T> & c) : mc(c) {}
+
+    void first() override {
+
+    }
+
+    void next() override {
+
+    }
+
+    bool isDone() override {
+
+    }
+
+    T& current() override {
+
+    }
+};
+
+void myAlgorithm() {
+    MyCollection<int> mc;
+    Iterator<int> iter = mc.getIterator();
+    for (iter.first(); !iter.isDone(); iter.next()) {
+        cout << iter.current() << endl;
+    }
+}
+ ```
+
+ **Iterator模式类图**：
+
+ ![](./iterator/iterator.png)
+
+ OO的虚函数方式实现迭代器在C++已经过时了，C++使用的是泛型方式实现迭代器（模板多态为主导的迭代器）。但核心精髓是一致的：**要解耦算法和容器之间的紧耦合关系**。
+
+ **要点总结**：
+1. 迭代抽象：访问一个聚合对象的内容而无需暴露它的内部表示
+2. 迭代多态：为遍历不同的集合结构提供一个统一的接口，从而不支持同样的算法在不同的集合结构上进行操作
+
+## <a name="21"></a>21. Chain of Responsibility 职责链
+**动机**：在软件构建的过程中，一个请求可能被多个对象处理，但是每个请求在运行时只能有一个接受者，如果显示指定，将带来发送者和接收者的紧耦合。
+
+**GoF模式定义**：使多个对象都有机会处理请求，从而避免请求的发送者和接受者之间的耦合关系。**将这些对象连成一条链，并沿着这条链传递请求，直到有一个对象处理它为止**。
+
+**职责链模式类图**：
+
+![](./ChainOfResponsibility/cor.png)
+
+**示例代码**：
+```c++
+#include <iostream>
+#include <string>
+
+using namespace std;
+
+enum class RequestType
+{
+    REQ_HANDLER1,
+    REQ_HANDLER2,
+    REQ_HANDLER3
+};
+
+class Request
+{
+    string description;
+    RequestType reqType;
+
+public:
+    Request(const string & desc, RequestType type) : description(desc), reqType(type) {}
+
+    RequestType getReqType() const { return reqType; }
+
+    const string& getDescription() const { return description; }
+};
+
+class ChainHandler
+{
+    ChainHandler *nextChain;
+
+    void sendRequestToNextHandler(const Request& req) {
+        if (nextChain != nullptr) {
+            nextChain->handle(req);
+        }
+    }
+
+protected:
+    virtual bool canHandleRequest(const Request & req) = 0;
+    virtual void processRequest(const Request & req) = 0;
+
+public:
+    ChainHandler() { nextChain = nullptr; }
+
+    void setNextChain(ChainHandler *next) {
+        nextChain = next;
+    }
+
+    /** 职责链核心处理逻辑：request自己能处理就处理，自己不能处理将request发送给下一个 */
+    void handle(Request req) {
+        if (canHandleRequest(req)) {
+            processRequest(req);
+        } else {
+            sendRequestToNextHandler(req);
+        }
+    }
+};
+
+class Handler1 : public ChainHandler
+{
+protected: 
+    bool canHandleRequest(const Request & req) override {
+        return req.getReqType() == RequestType::REQ_HANDLER1;
+    }
+
+    void processRequest(const Request & req) override {
+        cout << "Handler1 handle request: " << req.getDescription() << endl;
+    }
+};
+
+class Handler2 : public ChainHandler
+{
+protected: 
+    bool canHandleRequest(const Request & req) override {
+        return req.getReqType() == RequestType::REQ_HANDLER2;
+    }
+
+    void processRequest(const Request & req) override {
+        cout << "Handler2 handle request: " << req.getDescription() << endl;
+    }
+};
+
+class Handler3 : public ChainHandler
+{
+protected: 
+    bool canHandleRequest(const Request & req) override {
+        return req.getReqType() == RequestType::REQ_HANDLER3;
+    }
+
+    void processRequest(const Request & req) override {
+        cout << "Handler3 handle request: " << req.getDescription() << endl;
+    }
+};
+
+int main() {
+    Handler1 h1;
+    Handler2 h2;
+    Handler3 h3;
+    h1.setNextChain(&h2);
+    h2.setNextChain(&h3);
+
+    Request req("process task...", RequestType::REQ_HANDLER1);
+    // 传递的过程中，遇到哪个对象能处理它就处理，处理不了继续往下传递
+    h1.handle(req);
+
+    return 0;
+}
+```
+
+**职责链模式要点总结**：
+1. Chain of Responsibility模式的应用场景在于"一个请求有多个接受者，但最后一个真正的接受者只有一个"，这时请求的发送者和接受者的耦合有可能出现"变化脆弱"的症状，职责链的目的就是将二者解耦，从而更好地应对变化
+2. 所谓请求的发送者和接受者的解耦：请求的发送者只需要把"皮球"(请求)传递给第一个接受者(Handler)，而无需关心这些接受者(Handler)内部是以什么样的数据结构组织的。
+3. 应用了职责链模式，对象的职责分派更具有灵活性。我们可以在运行时动态添加/修改请求的处理职责。
