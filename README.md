@@ -44,6 +44,8 @@
 
 [22. State模式](#22)
 
+[23. Builder模式](#23)
+
 ## <a name="1"></a>1. 任何设计模式的最高宗旨（金科玉律）：高内聚，低耦合
 
 ## <a name="2"></a>2. 正交设计
@@ -4827,3 +4829,288 @@ public:
 2. 为不同的状态引入不同的对象使得状态转换变得明确，而且可以保证不会出现状态不一致的情况，因为转换是原子性的。
 3. 如果State对象没有实例变量，可以考虑使用单例维护State对象。
 4. State模式和Strategy模式解决问题的手法非常类似
+
+## <a name="23"></a>23. Builder模式
+**模式动机**：在软件系统中，有时候面临着"一个复杂对象"的创建工作，其通常由各个部分的子对象用一定算法构成；由于需求的变化，这个复杂对象的各个部分经常面临着剧烈**变化**，但是将它们组合在一起的构建算法确实**稳定的**。
+
+看一个构造Document的示例：
+```c++
+#include <iostream>
+#include <vector>
+
+using namespace std;
+
+struct Header {};
+struct Page {};
+struct Body {
+    vector<Page> pages;
+};
+struct Footer {};
+
+class Document
+{
+    Header header;
+    Body body;
+    Footer footer;
+
+protected:
+    virtual Header buildHeader() = 0;
+    virtual Body buildBody() = 0;
+    virtual Page buildPage(int index) = 0;
+    virtual Footer buildFooter() = 0;
+
+public:
+    Document() {
+        // 注意：c++构造函数调用虚函数是静态绑定，没有多态效应
+        header = buildHeader(); // 静态绑定
+
+        int pageNum = readPageNumber(); // 静态绑定
+        body = buildBody();
+
+        for (int i = 0; i < pageNum; i++) {
+            body.pages[i] = buildPage(i); // 静态绑定
+        }
+        footer = buildFooter(); // 静态绑定
+
+        return doc;
+    }
+};
+
+// HTML
+class HTMLDocument : public Document
+{
+protected:
+    Header buildHeader() override {
+
+    }
+    Body buildBody() override {
+
+    }
+    Page buildPage(int index) override {
+
+    }
+    Footer buildFooter() override {
+
+    }
+};
+
+// MarkDown
+class MarkDownDocument : public Document
+{
+protected:
+    Header buildHeader() override {
+
+    }
+    Body buildBody() override {
+
+    }
+    Page buildPage(int index) override {
+
+    }
+    Footer buildFooter() override {
+        
+    }
+};
+```
+注意：C++构造函数调用虚函数是静态绑定，没有多态效应。所以不要用构造器去build子部分。
+```c++
+#include <iostream>
+#include <vector>
+
+using namespace std;
+
+struct Header {};
+struct Page {};
+struct Body {
+    vector<Page> pages;
+};
+struct Footer {};
+
+class Document
+{
+    Header header;
+    Body body;
+    Footer footer;
+
+protected:
+    virtual Header buildHeader() = 0;
+    virtual Body buildBody() = 0;
+    virtual Page buildPage(int index) = 0;
+    virtual Footer buildFooter() = 0;
+
+public:
+    void buildDocument() {  // 单独整个方法去build
+
+        header = buildHeader();     // 动态绑定
+
+        int pageNum = readPageNumber(); 
+        body = buildBody();
+
+        for (int i = 0; i < pageNum; i++) {
+            body.pages[i] = buildPage(i); 
+        }
+        footer = buildFooter();
+
+        return doc;
+    }
+};
+
+class HTMLDocument : public Document
+{
+protected:
+    Header buildHeader() override {
+
+    }
+    Body buildBody() override {
+
+    }
+    Page buildPage(int index) override {
+
+    }
+    Footer buildFooter() override {
+
+    }
+};
+
+class MarkDownDocument : public Document
+{
+protected:
+    Header buildHeader() override {
+
+    }
+    Body buildBody() override {
+
+    }
+    Page buildPage(int index) override {
+
+    }
+    Footer buildFooter() override {
+        
+    }
+};
+```
+
+**使用**:
+```c++
+int main() {
+    MarkDownDocument doc{};
+    doc.buildDocument();
+}
+```
+GoF定义的Builder模式，更推荐如下做法：
+```c++
+#include <iostream>
+#include <memory>
+#include <vector>
+
+using namespace std;
+
+struct Header {};
+struct Page {};
+struct Body {
+    vector<Page> pages;
+};
+struct Footer {};
+
+class Document
+{
+public:
+    Header header;
+    Body body;
+    Footer footer;
+};
+
+// *******************************
+
+/** 专门做文档的构建工作 */
+class DocumentBuilder
+{
+public:
+    virtual Header buildHeader() = 0;
+    virtual Body buildBody() = 0;
+    virtual Page buildPage(int index) = 0;
+    virtual Footer buildFooter() = 0;
+};
+
+class Director
+{
+    unique_ptr<DocumentBuilder> builder;
+public:
+    void setBuilder(unique_ptr<DocumentBuilder> newBuilder) {
+        builder = std::move(newBuilder);
+    }
+
+    unique_ptr<Document> buildDocument() {
+
+        unique_ptr<Document> doc(new Document());
+
+        doc->header = builder->buildHeader();
+        
+        int pageNum = readPageNumber();
+        doc->body = builder->buildBody();
+
+        for (int i = 0; i < pageNum; i++) {
+            doc->body.pages[i] = builder->buildPage(i);
+        }
+
+        doc->footer = builder->buildFooter();
+
+        return doc;
+    }
+};
+
+class HTMLBuilder : public DocumentBuilder
+{
+protected:
+    Header buildHeader() override {
+        // **********************
+    }
+    Body buildBody() override {
+        // **********************
+    }
+    Page buildPage(int index) override {
+        // **********************
+    }
+    Footer buildFooter() override {
+        // **********************
+    }
+};
+
+class MarkDownBuilder : public DocumentBuilder
+{
+protected:
+    Header buildHeader() override {
+        // #######################
+    }
+    Body buildBody() override {
+        // #######################
+    }
+    Page buildPage(int index) override {
+        // #######################
+    }
+    Footer buildFooter() override {
+        // #######################
+    }
+};
+
+// 客户代码使用
+int main() {
+    Director director;
+
+    unique_ptr<DocumentBuilder> builder(new HTMLBuilder);
+    director.setBuilder(std::move(builder));
+    
+    director.buildDocument();
+}
+```
+拆分成 DocumentBuilder 和 Director 两个类完成具体Document的创建工作。具体要不要将构建过程拆分开，实际情况可以根据构建的复杂度而定，如果特别复杂可以拆，不复杂就不拆。
+
+**GoF模式定义**：将一个复杂对象的构建与其表示相分离，使得同样构建过程（稳定）可以创建不同的表示（变化）。
+
+**模式类图**：
+![](./builder/builder.png)
+
+**要点总结**：
+1. Builder模式主要用于"分步骤构架一个复杂对象"。在这其中"分步骤"是一个稳定的算法，而复杂对象的各个部分则经常变化
+2. Builder模式主要在于应对"复杂对象各个部分"的频繁需求变动。其缺点在于难以应对"分步骤构建算法"的需求变动，和TemplateMethod模式类似
+3. 在Builder模式中，要注意C++语言中构造器和普通函数调用虚函数的差别：构造器调用虚函数是"静态绑定"，普通函数调用虚函数是"动态绑定"
