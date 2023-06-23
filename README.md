@@ -42,6 +42,8 @@
 
 [21. Chain of Responsibility 职责链](#21)
 
+[22. State模式](#22)
+
 ## <a name="1"></a>1. 任何设计模式的最高宗旨（金科玉律）：高内聚，低耦合
 
 ## <a name="2"></a>2. 正交设计
@@ -4610,3 +4612,218 @@ int main() {
 1. Chain of Responsibility模式的应用场景在于"一个请求有多个接受者，但最后一个真正的接受者只有一个"，这时请求的发送者和接受者的耦合有可能出现"变化脆弱"的症状，职责链的目的就是将二者解耦，从而更好地应对变化
 2. 所谓请求的发送者和接受者的解耦：请求的发送者只需要把"皮球"(请求)传递给第一个接受者(Handler)，而无需关心这些接受者(Handler)内部是以什么样的数据结构组织的。
 3. 应用了职责链模式，对象的职责分派更具有灵活性。我们可以在运行时动态添加/修改请求的处理职责。
+
+## <a name="22"></a>22. State模式
+在组件构建过程中，某些对象的状态经常发生变化，如何对这些变化进行有效的管理？同时又维持高层模块的稳定？"状态变化"模式为这个问题提供了解决方案。
+
+**状态变化典型模式**：
+* State模式
+* Memento模式
+
+**State模式动机**: 在软件构建过程中，某些对象的状态如果改变，其行为也会随之发生变化，比如文档处于只读状态，其支持的行为和读写状态所支持的行为就完全不同。
+
+如何在运行时根据对象的状态来透明的更改对象？
+
+假设一个网络的应用，这个网络应用会根据网络的状态做一些行为上的调整：
+```c++
+#include <iostream>
+#include <string>
+
+using namespace std;
+
+enum NetworkState
+{
+    Network_Open,
+    Network_Close,
+    Network_Connect,
+};
+
+class NetworkProcessor
+{
+    NetworkState state;
+
+public:
+ 
+    /** 根据状态不同行为变化，同时还会改变状态 */
+    void operation1() {
+        if (state == Network_Open) {
+            // operation1 for Network_Open
+            state = Network_Close;
+        } else if (state == Network_Close) {
+            // operation1 for Network_Close
+            state = Network_Connect;
+        } else if (state == Network_Connect) {
+            // operation1 for Network_Connect
+            state = Network_Open;
+        }
+    }
+
+    void operation2() {
+        if (state == Network_Open) {
+            // operation2 for Network_Open
+            state = Network_Connect;
+        } else if (state == Network_Close) {
+            // operation2 for Network_Close
+            state = Network_Open;
+        } else if (state == Network_Connect) {
+            // operation2 for Network_Connect
+            state = Network_Close;
+        }
+    }
+};
+```
+这段代码的"bad smell"和之前strategy模式非常类似(if-else)。如果将来有新增NetworkState状态，NetworkProcessor类中的operation函数需要跟着修改，这违反了开闭原则。
+
+所以解决方案和strategy模式也类似：
+```c++
+#include <iostream>
+#include <string>
+
+using namespace std;
+
+/** 
+ * 1. 把以前枚举类型转换成抽象基类 
+
+ * 2. 把所有和状态有关的操作: operation1，operation2 全部变成状态对象的行为
+ */
+class NetworkState 
+{
+public:
+    NetworkState* pNext;
+    
+    // 和状态有关的操作，变成状态对象的行为
+    virtual void operation1() = 0;
+    // 和状态有关的操作，变成状态对象的行为
+    virtual void operation2() = 0;
+    
+    virtual ~NetworkState() {}
+};
+
+class OpenState : public NetworkState
+{
+    static NetworkState *m_instance;
+
+public:
+    static NetworkState* getInstance() {
+        if (m_instance == nullptr) {
+            m_instance = new OpenState();
+        }
+        return m_instance;
+    }
+
+    void operation1() override {
+        // 1. operation1 for Network_Open
+
+        // 2. change state，换的对象，不是枚举
+        pNext = CloseState::getInstance();
+    }
+
+    void operation2() override {
+        // 1. operation2 for Network_Open
+
+        // 2. change state，换的对象，不是枚举
+        pNext = ConnectState::getInstance();
+    }
+};
+
+class CloseState : public NetworkState
+{
+    static NetworkState *m_instance;
+
+public:
+    static NetworkState* getInstance() {
+        if (m_instance == nullptr) {
+            m_instance = new CloseState();
+        }
+        return m_instance;
+    }
+
+    void operation1() override {
+        // 1. operation1 for Network_Close
+
+        // 2. change state
+        pNext = ConnectState::getInstance();
+    }
+
+    void operation2() override {
+        // 1. operation2 for Network_Close
+
+        // 2. change state
+        pNext = OpenState::getInstance();
+    }
+};
+
+class ConnectState : public NetworkState
+{
+    static NetworkState *m_instance;
+
+public:
+    static NetworkState* getInstance() {
+        if (m_instance == nullptr) {
+            m_instance = new ConnectState();
+        }
+        return m_instance;
+    }
+
+    void operation1() override {
+        // 1. operation1 for Network_Connect
+
+        // 2. change state
+        pNext = OpenState::getInstance();
+    }
+
+    void operation2() override {
+        // 1. operation2 for Network_Connect
+
+        // 2. change state
+        pNext = CloseState::getInstance();
+    }
+};
+
+// ====================================================================
+
+// 客户代码
+class NetworkProcessor
+{
+    // 状态对象，不是枚举了。
+    NetworkState *pState;
+
+public:
+    NetworkProcessor(NetworkState *pState) {
+        this->pState = pState;
+    }
+
+    void operation1() {
+        // ...
+
+        pState->operation1();
+        // update状态对象
+        pState = pState->pNext;
+
+        // ...
+    }
+
+    void operation2() {
+        // ...
+        
+        pState->operation2();
+        // update状态对象
+        pState = pState->pNext;
+
+        // ...
+    }
+};
+```
+这样修改后，NetworkProcessor类就稳定了。以后如果有新的State（比如WaitState），直接扩展新的子类即可`class ConnectState : public NetworkState`，而NetworkProcessor里面的代码不需要修改。
+
+**State模式GoF定义**：允许一个对象在其内部状态改变时改变它的行为。从而使对象开起来似乎修改了其行为。
+
+**State模式类图**：
+
+![](./state/state.png)
+
+**要点总结**：
+1. State模式将所有与一个特定状态相关的行为都放入一个State的子类对象中，在对象状态切换时，切换相应的对象；但同时维持state接口，这样实现了具体操作和状态之间的解耦。
+2. 为不同的状态引入不同的对象使得状态转换变得明确，而且可以保证不会出现状态不一致的情况，因为转换是原子性的。
+3. 如果State对象没有实例变量，可以考虑使用单例维护State对象。
+4. State模式和Strategy模式解决问题的手法非常类似
