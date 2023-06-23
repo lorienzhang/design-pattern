@@ -4674,7 +4674,7 @@ public:
 ```
 这段代码的"bad smell"和之前strategy模式非常类似(if-else)。如果将来有新增NetworkState状态，NetworkProcessor类中的operation函数需要跟着修改，这违反了开闭原则。
 
-所以解决方案和strategy模式也类似：
+所以解决方案和strategy模式也类似：用运行时多态解决if-else，或者说多态就是一个运行时的if-else。
 ```c++
 #include <iostream>
 #include <string>
